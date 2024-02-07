@@ -336,7 +336,7 @@ void SD_LOG::appendBuffer(int level, const char *format, ...) {
 void SD_LOG::sendBufferLOG() {
     if (!sd_log)
         return;
-    if (!filesys->exists(log_path)) {
+    if (!filesys->exists(log_path)) { // fixme: this can not stop kernel panic.
         Serial.println("[SDLOG] Log file unavailable!");
         sd_log = false;
         SD.end();

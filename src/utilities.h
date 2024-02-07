@@ -139,6 +139,8 @@
 #define HAS_SDCARD
 #define HAS_DISPLAY
 #define HAS_RTC // soldered an external DS3231 module.
+#define HAS_AD_BUTTON // soldered an external AD button.
+#define BUTTON_PIN                  34
 
 #elif defined(LILYGO_T3_V2_0)
 #define I2C_SDA                     21

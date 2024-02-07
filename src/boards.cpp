@@ -32,12 +32,13 @@ void initBoard() {
         ESP.deepSleep(999999999 * 999999999U);
     }
 
-
     SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
-
 
     Wire.begin(I2C_SDA, I2C_SCL);
 
+#ifdef HAS_AD_BUTTON
+    pinMode(BUTTON_PIN, INPUT);
+#endif
 
 #ifdef I2C1_SDA
     Wire1.begin(I2C1_SDA, I2C1_SCL);

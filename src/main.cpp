@@ -27,6 +27,8 @@
 #include "coredump.h"
 #include "customfont.h"
 #include <esp_task_wdt.h>
+#include "menu.h"
+#include "aFFS.h"
 
 #define WDT_TIMEOUT 20 // sec
 // #define WDT_RST_PERIOD 4000 // ms
@@ -53,6 +55,7 @@ uint64_t runtime_timer = 0;
 uint64_t screen_timer = 0;
 uint64_t led_timer = 0;
 uint64_t timer4 = 0;
+uint64_t btn_timer = 0;
 // uint64_t wdt_timer = 0;
 uint64_t net_timer = 0;
 uint64_t prb_timer = 0;
@@ -78,9 +81,12 @@ bool give_tel_gain = false;
 bool tel_set_ppm = false;
 bool no_wifi = false;
 bool have_cd = false;
+bool btn_pressed = false;
 SD_LOG sd1;
+aFFS flash;
 struct rx_info rxInfo;
 struct data_bond *db = nullptr;
+bool always_new = true;
 // PagerClient::pocsag_data *pd = nullptr;
 //endregion
 
@@ -99,6 +105,11 @@ void handlePreamble();
 
 void revertFrequency();
 
+#ifdef HAS_AD_BUTTON
+
+void handleButtonInput();
+
+#endif
 TaskHandle_t task_fd;
 enum task_states {
     TASK_INIT = 0,
@@ -226,7 +237,7 @@ void showSTR(const String &str) {
     u8g2->sendBuffer();
 }
 
-void showLBJ0(const struct lbj_data &l) {
+void showLBJ0(const struct lbj_data &l, const struct rx_info &r) {
     // box y 9->55
     char buffer[128];
     u8g2->setDrawColor(0);
@@ -249,12 +260,12 @@ void showLBJ0(const struct lbj_data &l) {
     u8g2->drawBox(98, 0, 30, 8);
     u8g2->setDrawColor(1);
     u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    sprintf(buffer, "%3.1f", rxInfo.rssi);
+    sprintf(buffer, "%3.1f", r.rssi);
     u8g2->drawStr(99, 7, buffer);
     u8g2->sendBuffer();
 }
 
-void showLBJ1(const struct lbj_data &l) {
+void showLBJ1(const struct lbj_data &l, const struct rx_info &r) {
     char buffer[128];
     u8g2->setDrawColor(0);
     u8g2->drawBox(0, 8, 128, 48);
@@ -309,12 +320,12 @@ void showLBJ1(const struct lbj_data &l) {
     u8g2->drawBox(98, 0, 30, 8);
     u8g2->setDrawColor(1);
     u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    sprintf(buffer, "%3.1f", rxInfo.rssi);
+    sprintf(buffer, "%3.1f", r.rssi);
     u8g2->drawStr(99, 7, buffer);
     u8g2->sendBuffer();
 }
 
-void showLBJ2(const struct lbj_data &l) {
+void showLBJ2(const struct lbj_data &l, const struct rx_info &r) {
     char buffer[128];
     u8g2->setDrawColor(0);
     u8g2->drawBox(0, 8, 128, 48);
@@ -327,7 +338,7 @@ void showLBJ2(const struct lbj_data &l) {
     u8g2->drawBox(98, 0, 30, 8);
     u8g2->setDrawColor(1);
     u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    sprintf(buffer, "%3.1f", rxInfo.rssi);
+    sprintf(buffer, "%3.1f", r.rssi);
     u8g2->drawStr(99, 7, buffer);
     u8g2->sendBuffer();
 }
@@ -517,6 +528,11 @@ void setup() {
 #endif
     }
 
+    flash.setIO(SPIFFS, Serial);
+    flash.begin();
+    flash.usePath("/", "CACHE");
+    // flash.listDir("/");
+
     // Process core dump.
     readCoreDump();
 
@@ -687,7 +703,9 @@ void loop() {
     //     wdt_timer = millis64();
     //     Serial.printf("WDT_RST %d [%llu]\n",r,t);
     // }
-
+#ifdef HAS_AD_BUTTON
+    handleButtonInput();
+#endif
     // freqCorrection();
     // Handle carrier timout.
     if (car_timer != 0 && millis64() - car_timer > 700 && prb_timer == 0 && rxInfo.timer == 0) {
@@ -942,6 +960,85 @@ void loop() {
     }
 }
 
+#ifdef HAS_AD_BUTTON
+
+void handleButtonInput() {
+    if (analogRead(BUTTON_PIN) >= 1300) {
+        if (btn_timer == 0) {
+            btn_timer = millis64();
+        }
+        if (millis64() - btn_timer <= 200 && !btn_pressed) {
+            uint16_t btn_level = analogRead(BUTTON_PIN);
+            if (btn_level >= 1460 && btn_level <= 1480) {
+                btn_pressed = true;
+                Serial.printf("[D] GPIO 34: %d ADU", btn_level);
+                Serial.println(", KEY 1");
+            } else if (btn_level >= 2260 && btn_level <= 2270) {
+                btn_pressed = true;
+                Serial.printf("[D] GPIO 34: %d ADU", btn_level);
+                Serial.println(", KEY 2");
+                lbj_data lbj;
+                rx_info rx;
+                // flash.retrieve(&lbj, &rx, true);
+                always_new = false;
+                if (u8g2 && flash.retrieve(&lbj, &rx, true)) {
+                    if (lbj.type == 0)
+                        showLBJ0(lbj, rx);
+                    else if (lbj.type == 1) {
+                        showLBJ1(lbj, rx);
+                    } else if (lbj.type == 2) {
+                        showLBJ2(lbj, rx);
+                    }
+                }
+            } else if (btn_level >= 2990 && btn_level <= 3110) {
+                btn_pressed = true;
+                Serial.printf("[D] GPIO 34: %d ADU", btn_level);
+                Serial.println(", KEY 3");
+                lbj_data lbj;
+                rx_info rx;
+                // flash.retrieve(&lbj, &rx, false);
+                if (u8g2 && flash.retrieve(&lbj, &rx, false)) {
+                    if (lbj.type == 0)
+                        showLBJ0(lbj, rx);
+                    else if (lbj.type == 1) {
+                        showLBJ1(lbj, rx);
+                    } else if (lbj.type == 2) {
+                        showLBJ2(lbj, rx);
+                    }
+                }
+            } else if (btn_level >= 4090 && btn_level <= 4096) {
+                btn_pressed = true;
+                Serial.printf("[D] GPIO 34: %d ADU", btn_level);
+                Serial.println(", KEY 4");
+                flash.toLatest();
+                lbj_data lbj;
+                rx_info rx;
+                // flash.retrieve(&lbj, &rx, false);
+                if (u8g2 && flash.retrieve(&lbj, &rx, false)) {
+                    if (lbj.type == 0)
+                        showLBJ0(lbj, rx);
+                    else if (lbj.type == 1) {
+                        showLBJ1(lbj, rx);
+                    } else if (lbj.type == 2) {
+                        showLBJ2(lbj, rx);
+                    }
+                }
+                always_new = true;
+            }
+            // delay(100);
+        } else if (millis64() - btn_timer > 200) {
+            btn_timer = 0;
+            btn_pressed = false;
+        }
+
+    } else if (btn_timer != 0) {
+        btn_timer = 0;
+        btn_pressed = false;
+    }
+}
+
+#endif
+
 void revertFrequency() {
     if (actual_frequency != freq_last) {
         actual_frequency = freq_last;
@@ -1106,6 +1203,27 @@ void handleSerialInput() {
         } else if (in == "afc on") {
             freq_correction = true;
             Serial.println("$ Frequency Correction Enabled");
+        } else if (in == "flash read") {
+            flash.readFile("/CACHE");
+        } else if (in == "flash clear") {
+            flash.clearCache();
+        } else if (in == "flash re") {
+            // String str;
+            // flash.retrieveLine(172,&str);
+            // Serial.println(str);
+            lbj_data lbj;
+            rx_info rx;
+            flash.retrieve(&lbj, &rx, true);
+            if (u8g2) {
+                if (lbj.type == 0)
+                    showLBJ0(lbj, rx);
+                else if (lbj.type == 1) {
+                    showLBJ1(lbj, rx);
+                } else if (lbj.type == 2) {
+                    showLBJ2(lbj, rx);
+                }
+            }
+
         }
     }
 }
@@ -1138,6 +1256,11 @@ void formatDataTask(void *pVoid) {
         db->str = db->str + "  " + i.str;
     }
 
+    float temp = 0;
+#ifdef HAS_RTC
+    temp = rtc.getTemperature();
+#endif
+
     // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));
     sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
     Serial.printf("decode complete.[%llu]", millis64() - runtime_timer);
@@ -1149,6 +1272,11 @@ void formatDataTask(void *pVoid) {
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
     sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
     Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
+
+    flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
+
+    if (always_new)
+        flash.toLatest();
 
     // sd1.disableSizeCheck();
     appendDataLog(db->pocsagData, db->lbjData, rxInfo);
@@ -1166,11 +1294,11 @@ void formatDataTask(void *pVoid) {
     fd_state = TASK_RUNNING_SCREEN;
     if (u8g2) {
         if (db->lbjData.type == 0)
-            showLBJ0(db->lbjData);
+            showLBJ0(db->lbjData, rxInfo);
         else if (db->lbjData.type == 1) {
-            showLBJ1(db->lbjData);
+            showLBJ1(db->lbjData, rxInfo);
         } else if (db->lbjData.type == 2) {
-            showLBJ2(db->lbjData);
+            showLBJ2(db->lbjData, rxInfo);
         }
         Serial.printf("Complete u8g2 [%llu]\n", millis64() - runtime_timer);
     }
