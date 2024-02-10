@@ -25,14 +25,16 @@
 // include libraries
 #include <RadioLib.h>
 #include "coredump.h"
-#include "customfont.h"
+
 #include <esp_task_wdt.h>
-#include "menu.h"
-#include "aFFS.h"
+#include "ScreenWrapper.h"
+// #include "aFFS.h"
+#include "aPreferences.h"
+// #include "aEFS.h"
 
 #define WDT_TIMEOUT 20 // sec
 // #define WDT_RST_PERIOD 4000 // ms
-#define FD_TASK_STACK_SIZE 3000 // 68200
+#define FD_TASK_STACK_SIZE 5000 // 68200
 #define FD_TASK_TIMEOUT 750 // ms
 #define FD_TASK_ATTEMPTS 3
 #define LED_ON_TIME 200 // ms
@@ -75,7 +77,7 @@ bool freq_correction = true;
 bool is_startline = true;
 bool exec_init_f80 = false;
 // bool agc_triggered = false;
-bool low_volt_warned = false;
+// bool low_volt_warned = false;
 bool give_tel_rssi = false;
 bool give_tel_gain = false;
 bool tel_set_ppm = false;
@@ -83,7 +85,8 @@ bool no_wifi = false;
 bool have_cd = false;
 bool btn_pressed = false;
 SD_LOG sd1;
-aFFS flash;
+aPreferences flash;
+ScreenWrapper oled;
 struct rx_info rxInfo;
 struct data_bond *db = nullptr;
 bool always_new = true;
@@ -122,228 +125,6 @@ enum task_states {
 };
 
 task_states fd_state;
-
-#ifdef HAS_DISPLAY
-
-void pword(const char *msg, int xloc, int yloc) {
-    int dspW = u8g2->getDisplayWidth();
-    int strW = 0;
-    char glyph[2];
-    glyph[1] = 0;
-    for (const char *ptr = msg; *ptr; *ptr++) {
-        glyph[0] = *ptr;
-        strW += u8g2->getStrWidth(glyph);
-        ++strW;
-        if (xloc + strW > dspW) {
-            int sxloc = xloc;
-            while (msg < ptr) {
-                glyph[0] = *msg++;
-                xloc += u8g2->drawStr(xloc, yloc, glyph);
-            }
-            strW -= xloc - sxloc;
-            yloc += u8g2->getMaxCharHeight();
-            xloc = 0;
-        }
-    }
-    while (*msg) {
-        glyph[0] = *msg++;
-        xloc += u8g2->drawStr(xloc, yloc, glyph);
-    }
-}
-
-void showInitComp() {
-    u8g2->clearBuffer();
-    u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    // bottom (0,56,128,8)
-    String ipa = WiFi.localIP().toString();
-    u8g2->drawStr(0, 64, ipa.c_str());
-    if (have_sd && WiFiClass::status() == WL_CONNECTED)
-        u8g2->drawStr(89, 64, "D");
-    else if (have_sd)
-        u8g2->drawStr(89, 64, "L");
-    else if (WiFiClass::status() == WL_CONNECTED)
-        u8g2->drawStr(89, 64, "N");
-    char buffer[32];
-    sprintf(buffer, "%2d", ets_get_cpu_frequency() / 10);
-    u8g2->drawStr(96, 64, buffer);
-    sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
-    u8g2->drawStr(108, 64, buffer);
-    // top (0,0,128,8)
-    if (!getLocalTime(&time_info, 0))
-        u8g2->drawStr(0, 7, "NO SNTP");
-    else {
-        sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
-                time_info.tm_hour, time_info.tm_min);
-        u8g2->drawStr(0, 7, buffer);
-    }
-    u8g2->sendBuffer();
-}
-
-void updateInfo() {
-    // update top
-    char buffer[32];
-    u8g2->setDrawColor(0);
-    u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    u8g2->drawBox(0, 0, 97, 8);
-    u8g2->setDrawColor(1);
-    if (!getLocalTime(&time_info, 0))
-        u8g2->drawStr(0, 7, "NO SNTP");
-    else {
-        sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
-                time_info.tm_hour, time_info.tm_min);
-        u8g2->drawStr(0, 7, buffer);
-    }
-#ifdef HAS_RTC
-    sprintf(buffer, "%dC", (int) rtc.getTemperature());
-    u8g2->drawStr(80, 7, buffer);
-#endif
-    // update bottom
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(0, 56, 128, 8);
-    u8g2->setDrawColor(1);
-    if (!no_wifi) {
-        String ipa = WiFi.localIP().toString();
-        u8g2->drawStr(0, 64, ipa.c_str());
-    } else
-        u8g2->drawStr(0, 64, "WIFI OFF");
-    sprintf(buffer, "%.1f", getBias(actual_frequency));
-    u8g2->drawStr(73, 64, buffer);
-    if (sd1.status() && WiFiClass::status() == WL_CONNECTED)
-        u8g2->drawStr(89, 64, "D");
-    else if (sd1.status())
-        u8g2->drawStr(89, 64, "L");
-    else if (WiFiClass::status() == WL_CONNECTED)
-        u8g2->drawStr(89, 64, "N");
-    sprintf(buffer, "%2d", ets_get_cpu_frequency() / 10);
-    u8g2->drawStr(96, 64, buffer);
-    voltage = battery.readVoltage() * 2;
-    sprintf(buffer, "%1.2f", voltage); // todo: Implement average voltage reading.
-    if (voltage < 3.15 && !low_volt_warned) {
-        Serial.printf("Warning! Low Voltage detected, %1.2fV\n", voltage);
-        sd1.append("低压警告，电池电压%1.2fV\n", voltage);
-        low_volt_warned = true;
-    }
-    u8g2->drawStr(108, 64, buffer);
-    u8g2->sendBuffer();
-}
-
-void showSTR(const String &str) {
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(0, 8, 128, 48);
-    u8g2->setDrawColor(1);
-    // u8g2->setFont(u8g2_font_wqy12_t_gb2312a);
-    u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    pword(str.c_str(), 0, 19);
-    u8g2->sendBuffer();
-}
-
-void showLBJ0(const struct lbj_data &l, const struct rx_info &r) {
-    // box y 9->55
-    char buffer[128];
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(0, 8, 128, 48);
-    u8g2->setDrawColor(1);
-    u8g2->setFont(u8g2_font_wqy15_t_custom);
-    if (l.direction == FUNCTION_UP) {
-        sprintf(buffer, "车  次 %s 上行", l.train);
-    } else if (l.direction == FUNCTION_DOWN)
-        sprintf(buffer, "车  次 %s 下行", l.train);
-    else
-        sprintf(buffer, "车  次 %s %d", l.train, l.direction);
-    u8g2->drawUTF8(0, 21, buffer);
-    sprintf(buffer, "速  度  %s KM/H", l.speed);
-    u8g2->drawUTF8(0, 37, buffer);
-    sprintf(buffer, "公里标 %s KM", l.position);
-    u8g2->drawUTF8(0, 53, buffer);
-    // draw RSSI
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(98, 0, 30, 8);
-    u8g2->setDrawColor(1);
-    u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    sprintf(buffer, "%3.1f", r.rssi);
-    u8g2->drawStr(99, 7, buffer);
-    u8g2->sendBuffer();
-}
-
-void showLBJ1(const struct lbj_data &l, const struct rx_info &r) {
-    char buffer[128];
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(0, 8, 128, 48);
-    u8g2->setDrawColor(1);
-    u8g2->setFont(u8g2_font_wqy12_t_gb2312a);
-    // line 1
-    sprintf(buffer, "车:%s%s", l.lbj_class, l.train);
-    u8g2->drawUTF8(0, 19, buffer);
-    sprintf(buffer, "速:%sKM/H", l.speed);
-    u8g2->drawUTF8(68, 19, buffer);
-    // line 2
-    sprintf(buffer, "线:%s", l.route_utf8);
-    u8g2->drawUTF8(0, 31, buffer);
-    u8g2->drawBox(67, 21, 13, 12);
-    u8g2->setDrawColor(0);
-    if (l.direction == FUNCTION_UP)
-        u8g2->drawUTF8(68, 31, "上");
-    else if (l.direction == FUNCTION_DOWN)
-        u8g2->drawUTF8(68, 31, "下");
-    else {
-        sprintf(buffer, "%d", l.direction);
-        u8g2->drawStr(71, 31, buffer);
-    }
-    u8g2->setDrawColor(1);
-    sprintf(buffer, "%sK", l.position);
-    u8g2->drawUTF8(86, 31, buffer);
-    // line 3
-    sprintf(buffer, "号:%s", l.loco);
-    u8g2->drawUTF8(0, 43, buffer);
-    if (l.loco_type.length())
-        u8g2->drawUTF8(72, 43, l.loco_type.c_str());
-    // line 4
-    String pos;
-    if (l.pos_lat_deg[1] && l.pos_lat_min[1]) {
-        sprintf(buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
-        pos += String(buffer);
-    } else {
-        sprintf(buffer, "%s ", l.pos_lat);
-        pos += String(buffer);
-    }
-    if (l.pos_lon_deg[1] && l.pos_lon_min[1]) {
-        sprintf(buffer, "%s°%s'", l.pos_lon_deg, l.pos_lon_min);
-        pos += String(buffer);
-    } else {
-        sprintf(buffer, "%s ", l.pos_lon);
-        pos += String(buffer);
-    }
-//    sprintf(buffer,"%s°%s'%s°%s'",l.pos_lat_deg,l.pos_lat_min,l.pos_lon_deg,l.pos_lon_min);
-    u8g2->drawUTF8(0, 54, pos.c_str());
-    // draw RSSI
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(98, 0, 30, 8);
-    u8g2->setDrawColor(1);
-    u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    sprintf(buffer, "%3.1f", r.rssi);
-    u8g2->drawStr(99, 7, buffer);
-    u8g2->sendBuffer();
-}
-
-void showLBJ2(const struct lbj_data &l, const struct rx_info &r) {
-    char buffer[128];
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(0, 8, 128, 48);
-    u8g2->setDrawColor(1);
-    u8g2->setFont(u8g2_font_wqy15_t_custom);
-    sprintf(buffer, "当前时间 %s ", l.time);
-    u8g2->drawUTF8(0, 21, buffer);
-    // draw RSSI
-    u8g2->setDrawColor(0);
-    u8g2->drawBox(98, 0, 30, 8);
-    u8g2->setDrawColor(1);
-    u8g2->setFont(u8g2_font_squeezed_b7_tr);
-    sprintf(buffer, "%3.1f", r.rssi);
-    u8g2->drawStr(99, 7, buffer);
-    u8g2->sendBuffer();
-}
-
-#endif
 
 void dualPrintf(bool time_stamp, const char *format, ...) { // Generated by ChatGPT.
     char buffer[256]; // 创建一个足够大的缓冲区来容纳格式化后的字符串
@@ -528,16 +309,20 @@ void setup() {
 #endif
     }
 
-    flash.setIO(SPIFFS, Serial);
-    flash.begin();
-    flash.usePath("/", "CACHE");
+    // flash.setIO(SPIFFS, Serial);
+    flash.begin("cache", false);
+
+    // SPIFFS.format();
+    // flash.setIndexPath("/","index.bin");
+    // flash.usePath("/", "CACHE", false);
     // flash.listDir("/");
 
     // Process core dump.
     readCoreDump();
 
     if (u8g2) {
-        showInitComp();
+        oled.setDisplay(u8g2);
+        oled.showInitComp();
         u8g2->setFont(u8g2_font_wqy12_t_gb2312a);
         u8g2->setCursor(0, 52);
         u8g2->println("Initializing...");
@@ -591,8 +376,9 @@ void setup() {
         u8g2->setDrawColor(1);
         u8g2->drawStr(0, 52, "Listening...");
         u8g2->sendBuffer();
-        Serial.printf("Mem left: %d Bytes\n", esp_get_free_heap_size());
     }
+
+    Serial.printf("Mem left: %d Bytes\n", esp_get_free_heap_size());
 
     // test stuff
     // LBJTEST();
@@ -780,7 +566,7 @@ void loop() {
     if (screen_timer == 0) {
         screen_timer = millis64();
     } else if (millis64() - screen_timer > 3000) { // Set to 3000 to reduce interference.
-        updateInfo();
+        oled.updateInfo();
         screen_timer = millis64();
     }
 
@@ -979,16 +765,12 @@ void handleButtonInput() {
                 Serial.println(", KEY 2");
                 lbj_data lbj;
                 rx_info rx;
+                String rx_time;
+                uint16_t line;
                 // flash.retrieve(&lbj, &rx, true);
                 always_new = false;
-                if (u8g2 && flash.retrieve(&lbj, &rx, true)) {
-                    if (lbj.type == 0)
-                        showLBJ0(lbj, rx);
-                    else if (lbj.type == 1) {
-                        showLBJ1(lbj, rx);
-                    } else if (lbj.type == 2) {
-                        showLBJ2(lbj, rx);
-                    }
+                if (flash.retrieve(&lbj, &rx, &rx_time, &line, -1)) {
+                    oled.showLBJ(lbj, rx, rx_time, line);
                 }
             } else if (btn_level >= 2990 && btn_level <= 3110) {
                 btn_pressed = true;
@@ -996,15 +778,12 @@ void handleButtonInput() {
                 Serial.println(", KEY 3");
                 lbj_data lbj;
                 rx_info rx;
+                String rx_time;
+                uint16_t line;
+                always_new = false;
                 // flash.retrieve(&lbj, &rx, false);
-                if (u8g2 && flash.retrieve(&lbj, &rx, false)) {
-                    if (lbj.type == 0)
-                        showLBJ0(lbj, rx);
-                    else if (lbj.type == 1) {
-                        showLBJ1(lbj, rx);
-                    } else if (lbj.type == 2) {
-                        showLBJ2(lbj, rx);
-                    }
+                if (flash.retrieve(&lbj, &rx, &rx_time, &line, 1)) {
+                    oled.showLBJ(lbj, rx, rx_time, line);
                 }
             } else if (btn_level >= 4090 && btn_level <= 4096) {
                 btn_pressed = true;
@@ -1013,17 +792,14 @@ void handleButtonInput() {
                 flash.toLatest();
                 lbj_data lbj;
                 rx_info rx;
+                String rx_time;
+                uint16_t line;
                 // flash.retrieve(&lbj, &rx, false);
-                if (u8g2 && flash.retrieve(&lbj, &rx, false)) {
-                    if (lbj.type == 0)
-                        showLBJ0(lbj, rx);
-                    else if (lbj.type == 1) {
-                        showLBJ1(lbj, rx);
-                    } else if (lbj.type == 2) {
-                        showLBJ2(lbj, rx);
-                    }
+                if (flash.retrieve(&lbj, &rx, &rx_time, &line, 0)) {
+                    oled.showLBJ(lbj, rx, rx_time, line);
                 }
                 always_new = true;
+                oled.resumeUpdate();
             }
             // delay(100);
         } else if (millis64() - btn_timer > 200) {
@@ -1203,27 +979,32 @@ void handleSerialInput() {
         } else if (in == "afc on") {
             freq_correction = true;
             Serial.println("$ Frequency Correction Enabled");
-        } else if (in == "flash read") {
-            flash.readFile("/CACHE");
-        } else if (in == "flash clear") {
-            flash.clearCache();
+        }
+            // else if (in == "flash read") {
+            //     flash.readFile("/CACHE");
+            // }
+        else if (in == "flash clear") {
+            flash.clearKeys();
         } else if (in == "flash re") {
             // String str;
             // flash.retrieveLine(172,&str);
             // Serial.println(str);
             lbj_data lbj;
             rx_info rx;
-            flash.retrieve(&lbj, &rx, true);
-            if (u8g2) {
-                if (lbj.type == 0)
-                    showLBJ0(lbj, rx);
-                else if (lbj.type == 1) {
-                    showLBJ1(lbj, rx);
-                } else if (lbj.type == 2) {
-                    showLBJ2(lbj, rx);
-                }
-            }
+            flash.retrieve(&lbj, &rx, nullptr, nullptr, true);
+            // if (u8g2) {
+            //     if (lbj.type == 0)
+            //         showLBJ0(lbj, rx);
+            //     else if (lbj.type == 1) {
+            //         showLBJ1(lbj, rx);
+            //     } else if (lbj.type == 2) {
+            //         showLBJ2(lbj, rx);
+            //     }
+            // }
+            oled.showLBJ(lbj, rx);
 
+        } else if (in == "flash stat") {
+            flash.getStats();
         }
     }
 }
@@ -1256,7 +1037,7 @@ void formatDataTask(void *pVoid) {
         db->str = db->str + "  " + i.str;
     }
 
-    float temp = 0;
+    float temp = 0.01;
 #ifdef HAS_RTC
     temp = rtc.getTemperature();
 #endif
@@ -1274,9 +1055,10 @@ void formatDataTask(void *pVoid) {
     Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
 
     flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
-
     if (always_new)
         flash.toLatest();
+
+    Serial.printf("flash append complete.[%llu]", millis64() - runtime_timer);
 
     // sd1.disableSizeCheck();
     appendDataLog(db->pocsagData, db->lbjData, rxInfo);
@@ -1293,13 +1075,7 @@ void formatDataTask(void *pVoid) {
 #ifdef HAS_DISPLAY
     fd_state = TASK_RUNNING_SCREEN;
     if (u8g2) {
-        if (db->lbjData.type == 0)
-            showLBJ0(db->lbjData, rxInfo);
-        else if (db->lbjData.type == 1) {
-            showLBJ1(db->lbjData, rxInfo);
-        } else if (db->lbjData.type == 2) {
-            showLBJ2(db->lbjData, rxInfo);
-        }
+        oled.showLBJ(db->lbjData, rxInfo);
         Serial.printf("Complete u8g2 [%llu]\n", millis64() - runtime_timer);
     }
 #endif
@@ -1322,6 +1098,6 @@ void simpleFormatTask() { // only output initially phrased data in case of memor
         db->str += String(i.addr) + "/" + String(i.func) + ":" + i.str + "\n ";
     }
     // pword(db->str.c_str(),20,50);
-    showSTR(db->str);
+    oled.showSTR(db->str);
 }
 // END OF FILE.

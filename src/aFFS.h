@@ -8,7 +8,7 @@
 #include <SPIFFS.h>
 #include "networks.hpp"
 
-const int FLASH_MAX_LINES = 2500;
+const int FLASH_MAX_LINES = 5;
 
 class aFFS {
 public:
@@ -25,11 +25,17 @@ public:
 
     void usePath(const char *path, const char *name);
 
+    void usePath(const char *path, const char *name, bool create_index);
+
+    void setIndexPath(const char *path, const char *name);
+
     void append(lbj_data lbj, rx_info rx, float volt, float temp);
 
     bool retrieve(lbj_data *lbj, rx_info *rx, bool last);
 
     bool retrieveLine(uint32_t line, String *line_str);
+
+    bool retrieveLineByNum(uint32_t num, String *line_str);
 
     bool clearCache();
 
@@ -39,14 +45,23 @@ public:
 
 
 private:
+    void readIndex();
+    void createIndex(File file);
+    void appendIndex(const uint16_t &line);
+
+    bool have_index;
     bool have_spiffs;
     HardwareSerial serial;
     fs::SPIFFSFS spiffs;
     String cache_path;
     File cache_file;
-    uint32_t lines;
+    String index_path;
+    File index_file;
+    uint16_t lines;
     uint32_t ret_line;
-    size_t lines_pos[FLASH_MAX_LINES + 1];
+    uint32_t number;
+    // size_t lines_pos[FLASH_MAX_LINES + 1];
+    uint64_t indexes[FLASH_MAX_LINES + 1];
 };
 
 
