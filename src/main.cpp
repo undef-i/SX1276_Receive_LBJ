@@ -27,7 +27,8 @@
 #include "coredump.h"
 
 #include <esp_task_wdt.h>
-#include "ScreenWrapper.h"
+// #include "ScreenWrapper.h"
+#include "Menu.h"
 // #include "aFFS.h"
 #include "aPreferences.h"
 // #include "aEFS.h"
@@ -84,9 +85,10 @@ bool tel_set_ppm = false;
 bool no_wifi = false;
 bool have_cd = false;
 bool btn_pressed = false;
+bool first_rx = false;
 SD_LOG sd1;
 aPreferences flash;
-ScreenWrapper oled;
+Menu oled;
 struct rx_info rxInfo;
 struct data_bond *db = nullptr;
 bool always_new = true;
@@ -290,10 +292,12 @@ void setup() {
 #ifdef HAS_RTC
     // rtc.begin();
     // rtc.getDateTime(time_info);
-    time_info = rtcLibtoC(rtc.now());
-    Serial.println(&time_info, "[eRTC] RTC Time %Y-%m-%d %H:%M:%S ");
-    timeSync(time_info); // sync system time from rtc
-    Serial.printf("SYS Time %s\n", fmtime(time_info));
+    if(have_rtc) {
+        time_info = rtcLibtoC(rtc.now());
+        Serial.println(&time_info, "[eRTC] RTC Time %Y-%m-%d %H:%M:%S ");
+        timeSync(time_info); // sync system time from rtc
+        Serial.printf("SYS Time %s\n", fmtime(time_info));
+    }
 #endif
 
     Serial.printf("RST: %s\n", printResetReason(reset_reason).c_str());
@@ -304,8 +308,10 @@ void setup() {
         sd1.append(2, "调试等级 %d\n", LOG_VERBOSITY);
         sd1.append("复位原因 %s\n", printResetReason(reset_reason).c_str());
 #ifdef HAS_RTC
-        sd1.append("RTC时间 %d-%02d-%02d %02d:%02d:%02d\n", time_info.tm_year + 1900, time_info.tm_mon + 1,
-                   time_info.tm_mday, time_info.tm_hour, time_info.tm_min, time_info.tm_sec);
+        if (have_rtc) {
+            sd1.append("RTC时间 %d-%02d-%02d %02d:%02d:%02d\n", time_info.tm_year + 1900, time_info.tm_mon + 1,
+                       time_info.tm_mday, time_info.tm_hour, time_info.tm_min, time_info.tm_sec);
+        }
 #endif
     }
 
@@ -322,6 +328,7 @@ void setup() {
 
     if (u8g2) {
         oled.setDisplay(u8g2);
+        oled.setFlash(&flash);
         oled.showInitComp();
         u8g2->setFont(u8g2_font_wqy12_t_gb2312a);
         u8g2->setCursor(0, 52);
@@ -370,13 +377,7 @@ void setup() {
     sd1.append("启动用时 %llu ms\n", millis64() - runtime_timer);
     runtime_timer = 0;
 
-    if (u8g2) {
-        u8g2->setDrawColor(0);
-        u8g2->drawBox(0, 42, 128, 14);
-        u8g2->setDrawColor(1);
-        u8g2->drawStr(0, 52, "Listening...");
-        u8g2->sendBuffer();
-    }
+    oled.showListening();
 
     Serial.printf("Mem left: %d Bytes\n", esp_get_free_heap_size());
 
@@ -491,6 +492,13 @@ void loop() {
     // }
 #ifdef HAS_AD_BUTTON
     handleButtonInput();
+
+    if (oled.ppmChanged() && runtime_timer == 0 && !pager.gotSyncState()) {
+        actual_frequency = actualFreq(ppm);
+        radio.setFrequency(actual_frequency);
+        oled.clearPPMFlag();
+        Serial.printf("[D] Frequency altered to %f MHz, ppm %.2f\n", actual_frequency, getBias(actual_frequency));
+    }
 #endif
     // freqCorrection();
     // Handle carrier timout.
@@ -569,6 +577,7 @@ void loop() {
         oled.updateInfo();
         screen_timer = millis64();
     }
+    oled.updatePage();
 
     // if (millis64()%5000 == 0){
     //     sd1.append("[D] 当前运行时间 %lu ms.\n",millis64());
@@ -684,6 +693,8 @@ void loop() {
             digitalWrite(BOARD_LED, LED_ON);
             format_task_timer = millis64();
             led_timer = millis64();
+            if (!first_rx)
+                first_rx = true;
 
             sd1.append(2, "正在格式化输出...\n");
             // formatDataTask();
@@ -759,47 +770,61 @@ void handleButtonInput() {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 1");
+                if (!oled.isMenu()) {
+                    if (first_rx || !always_new) {
+                        always_new = false;
+                    }
+                    oled.openMenu();
+                } else
+                    oled.closeMenu();
             } else if (btn_level >= 2260 && btn_level <= 2270) {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 2");
-                lbj_data lbj;
-                rx_info rx;
-                String rx_time;
-                uint16_t line;
-                // flash.retrieve(&lbj, &rx, true);
-                always_new = false;
-                if (flash.retrieve(&lbj, &rx, &rx_time, &line, -1)) {
-                    oled.showLBJ(lbj, rx, rx_time, line);
+                if (!oled.isMenu()) {
+                    always_new = false;
+                    oled.showSelectedLBJ(-1);
+                } else {
+                    oled.handleKey(true);
                 }
+                // lbj_data lbj;
+                // rx_info rx;
+                // String rx_time;
+                // uint16_t line;
+                // uint32_t id;
+                // float temp;
+                // // flash.retrieve(&lbj, &rx, true);
+                // always_new = false;
+                // if (flash.retrieve(&lbj, &rx, &rx_time, &line, &id, &temp, -1)) {
+                //     oled.showLBJ(lbj, rx, rx_time, line, id, temp);
+                // }
             } else if (btn_level >= 2990 && btn_level <= 3110) {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 3");
-                lbj_data lbj;
-                rx_info rx;
-                String rx_time;
-                uint16_t line;
-                always_new = false;
-                // flash.retrieve(&lbj, &rx, false);
-                if (flash.retrieve(&lbj, &rx, &rx_time, &line, 1)) {
-                    oled.showLBJ(lbj, rx, rx_time, line);
+                if (!oled.isMenu()) {
+                    always_new = false;
+                    oled.showSelectedLBJ(1);
+                } else {
+                    oled.handleKey(false);
                 }
             } else if (btn_level >= 4090 && btn_level <= 4096) {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 4");
-                flash.toLatest();
-                lbj_data lbj;
-                rx_info rx;
-                String rx_time;
-                uint16_t line;
-                // flash.retrieve(&lbj, &rx, false);
-                if (flash.retrieve(&lbj, &rx, &rx_time, &line, 0)) {
-                    oled.showLBJ(lbj, rx, rx_time, line);
+                if (!oled.isMenu()) {
+                    if (first_rx) {
+                        flash.toLatest();
+                        oled.showSelectedLBJ(0);
+                    } else {
+                        oled.showListening();
+                        flash.toLatest(0);
+                    }
+                    always_new = true;
+                    oled.resumeUpdate();
+                } else {
+                    oled.acknowledge();
                 }
-                always_new = true;
-                oled.resumeUpdate();
             }
             // delay(100);
         } else if (millis64() - btn_timer > 200) {
@@ -914,12 +939,14 @@ void handleSerialInput() {
             Serial.println("$ Task state " + String(fd_state));
         else if (in == "rtc") {
 #ifdef HAS_RTC
-            // rtc.getDateTime(time_info);
-            // DateTime now = rtc.now();
-            time_info = rtcLibtoC(rtc.now());
-            float temp = rtc.getTemperature();
-            Serial.print(&time_info, "$ [eRTC] %Y-%m-%d %H:%M:%S ");
-            Serial.printf("Temp: %.2f °C\n", temp);
+            if (have_rtc) {
+                // rtc.getDateTime(time_info);
+                // DateTime now = rtc.now();
+                time_info = rtcLibtoC(rtc.now());
+                float temp = rtc.getTemperature();
+                Serial.print(&time_info, "$ [eRTC] %Y-%m-%d %H:%M:%S ");
+                Serial.printf("Temp: %.2f °C\n", temp);
+            }
 #endif
         } else if (in == "time") {
             getLocalTime(&time_info, 1);
@@ -991,7 +1018,7 @@ void handleSerialInput() {
             // Serial.println(str);
             lbj_data lbj;
             rx_info rx;
-            flash.retrieve(&lbj, &rx, nullptr, nullptr, true);
+            flash.retrieve(&lbj, &rx, nullptr, nullptr, nullptr, nullptr, true);
             // if (u8g2) {
             //     if (lbj.type == 0)
             //         showLBJ0(lbj, rx);
@@ -1029,17 +1056,26 @@ void formatDataTask(void *pVoid) {
     fd_state = TASK_RUNNING;
     // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
     sd1.append(2, "格式化任务已创建\n");
+    bool empty = true;
     for (auto &i: db->pocsagData) {
         if (i.is_empty)
             continue;
+        empty = false;
         Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
         sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
         db->str = db->str + "  " + i.str;
     }
+    if (empty) {
+        fd_state = TASK_DONE;
+        task_fd = nullptr;
+        vTaskDelete(nullptr);
+        Serial.println("[D] Empty message");
+    }
 
     float temp = 0.01;
 #ifdef HAS_RTC
-    temp = rtc.getTemperature();
+    if (have_rtc)
+        temp = rtc.getTemperature();
 #endif
 
     // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));

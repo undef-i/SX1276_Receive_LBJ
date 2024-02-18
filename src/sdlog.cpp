@@ -548,6 +548,7 @@ void SD_LOG::endCD() {
     if (!sd_cd)
         return;
     append("内核转储文件已保存至 %s\n", cd.name());
+    cd_name = cd.name();
     cd.close();
     sd_cd = false;
 }
@@ -563,7 +564,19 @@ void SD_LOG::end() {
 }
 
 void SD_LOG::reopenSD() {
-    SD.begin(SDCARD_CS, SDSPI);
+    SD.begin(SDCARD_CS, SDSPI, 40000000);
     // sd_csv = true;
     // sd_log = true;
+}
+
+String SD_LOG::retFilename(file_type type) {
+    switch (type) {
+        case SDLOG_FILE_LOG:
+            return {filename};
+        case SDLOG_FILE_CSV:
+            return {filename_csv};
+        case SDLOG_FILE_CD:
+            return cd_name;
+    }
+    return {};
 }

@@ -8,6 +8,7 @@
 #include "networks.hpp"
 #include <Preferences.h>
 #include <nvs_flash.h>
+#include <cstdint>
 
 const int PREF_MAX_LINES = 2500;
 
@@ -19,13 +20,22 @@ public:
 
     bool append(lbj_data lbj, rx_info rx, float volt, float temp);
 
-    bool retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *line_num, int8_t bias);
+    bool retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *line_num, uint32_t *id, float *temp,
+                  int8_t bias);
+
+    bool retrieve(String *str_array, uint32_t arr_size, int8_t bias);
 
     bool clearKeys();
 
-    void toLatest();
+    void toLatest(int8_t bias = -1);
+
+    bool isLatest(int8_t bias = -1) const;
 
     void getStats();
+
+    int32_t getRetLines();
+
+    void setRetLines(int32_t line);
 
 private:
     Preferences pref;

@@ -321,6 +321,7 @@ extern float voltage;
 
 extern SPIClass SDSPI;
 extern bool have_sd;
+extern bool have_rtc;
 
 void initBoard();
 

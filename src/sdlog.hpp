@@ -17,6 +17,12 @@
 #define MAX_CSV_SIZE 500000
 #define LOG_VERBOSITY 0
 
+enum file_type {
+    SDLOG_FILE_LOG,
+    SDLOG_FILE_CSV,
+    SDLOG_FILE_CD
+};
+
 class SD_LOG {
 public:
     // SD_LOG() = default;
@@ -69,6 +75,8 @@ public:
 
     bool status() const;
 
+    String retFilename(file_type type);
+
 private:
     void getFilename(const char *path);
 
@@ -78,6 +86,7 @@ private:
 
     String log_path;
     String csv_path;
+    String cd_name;
     fs::FS *filesys;
     String large_buffer;
     String large_buffer_csv;

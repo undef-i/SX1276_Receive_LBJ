@@ -12,6 +12,7 @@ ESP32AnalogRead battery;
 float voltage;
 SPIClass SDSPI(HSPI);
 bool have_sd = false;
+bool have_rtc = false;
 
 #ifdef HAS_RTC
 RTC_DS3231 rtc;
@@ -34,7 +35,7 @@ void initBoard() {
 
     SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
 
-    Wire.begin(I2C_SDA, I2C_SCL);
+    Wire.begin(I2C_SDA, I2C_SCL, 400000);
 
 #ifdef HAS_AD_BUTTON
     pinMode(BUTTON_PIN, INPUT);
@@ -171,7 +172,8 @@ void initBoard() {
 #endif
 
 #ifdef HAS_RTC
-    rtc.begin();
+    if(rtc.begin())
+        have_rtc = true;
 #endif
 
 }

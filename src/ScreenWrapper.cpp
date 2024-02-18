@@ -2,6 +2,7 @@
 // Created by FLN1021 on 2024/2/10.
 //
 
+#include <cstdint>
 #include "ScreenWrapper.h"
 
 bool ScreenWrapper::setDisplay(U8G2_SSD1306_128X64_NONAME_F_HW_I2C *display_ptr) {
@@ -14,6 +15,8 @@ bool ScreenWrapper::setDisplay(U8G2_SSD1306_128X64_NONAME_F_HW_I2C *display_ptr)
 
 void ScreenWrapper::updateInfo() {
     if (!display)
+        return;
+    if (!update)
         return;
 
     char buffer[32];
@@ -31,8 +34,10 @@ void ScreenWrapper::updateInfo() {
             display->drawStr(0, 7, buffer);
         }
 #ifdef HAS_RTC
-        sprintf(buffer, "%dC", (int) rtc.getTemperature());
-        display->drawStr(80, 7, buffer);
+        if (have_rtc) {
+            sprintf(buffer, "%dC", (int) rtc.getTemperature());
+            display->drawStr(80, 7, buffer);
+        }
 #endif
 
         // update bottom
@@ -253,6 +258,8 @@ void ScreenWrapper::showLBJ2(const struct lbj_data &l, const struct rx_info &r) 
 void ScreenWrapper::showLBJ(const lbj_data &l, const rx_info &r) {
     if (!display)
         return;
+    if (!update)
+        return;
     if (l.type == 0)
         showLBJ0(l, r);
     else if (l.type == 1) {
@@ -262,7 +269,8 @@ void ScreenWrapper::showLBJ(const lbj_data &l, const rx_info &r) {
     }
 }
 
-void ScreenWrapper::showLBJ(const struct lbj_data &l, const struct rx_info &r, const String &time_str, uint16_t lines) {
+void ScreenWrapper::showLBJ(const struct lbj_data &l, const struct rx_info &r, const String &time_str, uint16_t lines,
+                            uint32_t id, float temp) {
     if (!display)
         return;
     if (update_top)
@@ -279,12 +287,18 @@ void ScreenWrapper::showLBJ(const struct lbj_data &l, const struct rx_info &r, c
         display->drawStr(0, 7, (time_str.substring(0, 16)).c_str());
     }
 
+    char buffer[32];
+    // show temp
+    if (fabs(temp - 0.01) > 0.001) {
+        sprintf(buffer, "%dC", (int) temp);
+        display->drawStr(80, 7, buffer);
+    }
+
     // show msg lines
     display->setDrawColor(0);
     display->drawBox(0, 56, 72, 8);
     display->setDrawColor(1);
-    char buffer[32];
-    sprintf(buffer, "%04d", lines);
+    sprintf(buffer, "%04d,%u", lines, id);
     display->drawStr(0, 64, buffer);
     // if (!no_wifi) {
     //     String ipa = WiFi.localIP().toString();
@@ -306,3 +320,193 @@ void ScreenWrapper::resumeUpdate() {
     update_top = true;
 }
 
+void ScreenWrapper::showSelectedLBJ(aPreferences *flash_cls, int8_t bias) {
+    lbj_data lbj;
+    rx_info rx;
+    String rx_time;
+    uint16_t line;
+    uint32_t id;
+    float temp;
+    if (flash_cls->retrieve(&lbj, &rx, &rx_time, &line, &id, &temp, bias)) {
+        showLBJ(lbj, rx, rx_time, line, id, temp);
+    }
+}
+
+void ScreenWrapper::showListening() {
+    if (!display)
+        return;
+    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setDrawColor(0);
+    // display->drawBox(0, 42, 128, 14);
+    display->drawBox(0, 8, 128, 48);
+    display->drawBox(98, 0, 30, 8);
+    display->setDrawColor(1);
+    display->drawStr(0, 52, "Listening...");
+    display->sendBuffer();
+}
+
+void ScreenWrapper::clearTop(top_sectors sector, bool sendBuffer) {
+    // if (!display)
+    //     return;
+    bool set_color = false;
+    if (display->getDrawColor() != 0) {
+        set_color = true;
+        display->setDrawColor(0);
+    }
+    switch (sector) {
+        case TOP_SECTOR_TIME:
+            display->drawBox(0, 0, 79, 8);
+            break;
+        case TOP_SECTOR_TEMPERATURE:
+            display->drawBox(80, 0, 98, 8);
+            break;
+        case TOP_SECTOR_RSSI:
+            display->drawBox(99, 0, 128, 8);
+            break;
+        case TOP_SECTOR_ALL:
+            display->drawBox(0, 0, 128, 8);
+            break;
+    }
+    if (set_color)
+        display->setDrawColor(1);
+    if (sendBuffer)
+        display->sendBuffer();
+}
+
+void ScreenWrapper::clearCenter(bool sendBuffer) {
+    bool set_color = false;
+    if (display->getDrawColor() != 0) {
+        set_color = true;
+        display->setDrawColor(0);
+    }
+
+    display->drawBox(0, 8, 128, 48);
+
+    if (set_color)
+        display->setDrawColor(1);
+    if (sendBuffer)
+        display->sendBuffer();
+}
+
+void ScreenWrapper::clearBottom(bottom_sectors sector, bool sendBuffer) {
+    bool set_color = false;
+    if (display->getDrawColor() != 0) {
+        set_color = true;
+        display->setDrawColor(0);
+    }
+    switch (sector) {
+        case BOTTOM_SECTOR_IP:
+            display->drawBox(0, 56, 72, 8);
+            break;
+        case BOTTOM_SECTOR_PPM:
+            display->drawBox(73, 56, 15, 8); // 73->88
+            break;
+        case BOTTOM_SECTOR_IND:
+            display->drawBox(89, 56, 6, 8); // 89->95
+            break;
+        case BOTTOM_SECTOR_CPU:
+            display->drawBox(96, 56, 11, 8); // 96->107
+            break;
+        case BOTTOM_SECTOR_BAT:
+            display->drawBox(108, 56, 20, 8); // 108->128
+            break;
+        case BOTTOM_SECTOR_ALL:
+            display->drawBox(0, 56, 128, 8);
+            break;
+    }
+    if (set_color)
+        display->setDrawColor(1);
+    if (sendBuffer)
+        display->sendBuffer();
+}
+
+void ScreenWrapper::clearAll() {
+    display->clearBuffer();
+}
+
+void ScreenWrapper::setFlash(aPreferences *flash_cls) {
+    flash = flash_cls;
+}
+
+void ScreenWrapper::showSelectedLBJ(int8_t bias) {
+    showSelectedLBJ(flash, bias);
+}
+
+void ScreenWrapper::showInfo(int8_t page) {
+    if (!display)
+        return;
+    if (page > 3 || page < 1)
+        return;
+    String tokens[28];
+    flash->retrieve(tokens, sizeof tokens, 0);
+    /* Standard format of cache:
+     * 条目数,电压,系统时间,温度,日期,时间,type,train,direction,speed,position,time,info2_hex,loco_type,lbj_class,loco,route,
+     * route_utf8,pos_lon_deg,pos_lon_min,pos_lat_deg,pos_lat_min,pos_lon,pos_lat,rssi,fer,ppm,id
+     */
+    clearAll();
+    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->drawUTF8(0, 12, "接收信息");
+    char buffer[34];
+    sprintf(buffer, "%d", page);
+    display->drawUTF8(118, 12, buffer);
+    display->drawHLine(0, 14, 128);
+
+    switch (page) {
+        case 1: {
+            display->drawUTF8(0, 26, ("条目: " + tokens[0] + "," + tokens[27]).c_str());
+            display->drawUTF8(0, 38, ("接收日期: " + tokens[4]).c_str());
+            display->drawUTF8(0, 50, ("接收时间: " + tokens[5]).c_str());
+            uint64_t time = std::stoull(tokens[2].c_str());
+            display->drawUTF8(0, 62, ("系统时间: " + String(time / 1000) + " ms").c_str());
+            break;
+        }
+        case 2: {
+            display->drawUTF8(0, 26, ("电压:" + tokens[1] + "V 温度:" + tokens[3] + "C").c_str());
+            float fer = std::stof(tokens[25].c_str());
+            sprintf(buffer, "测量频偏: %.2f Hz", fer);
+            display->drawUTF8(0, 38, buffer);
+            fer = std::stof(tokens[26].c_str());
+            sprintf(buffer, "设定频偏: %.2f ppm", fer);
+            display->drawUTF8(0, 50, buffer);
+            break;
+        }
+        case 3: {
+            if (tokens[12].length()) {
+                // display->drawUTF8(0,12,("I2HEX: "+tokens[12]).c_str());
+                pword(("I2HEX: " + tokens[12]).c_str(), 0, 26);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    display->sendBuffer();
+}
+
+void ScreenWrapper::pwordUTF8(const String &msg, int xloc, int yloc, int xmax, int ymax) {
+    int Width = xmax - xloc;
+    int Height = ymax - yloc;
+    int StrW = display->getUTF8Width(msg.c_str());
+    int8_t CharHeight = display->getMaxCharHeight();
+    auto lines = Height / CharHeight;
+    // Serial.printf("[D] lines %d, Height %d, CharH %d\n",lines,Height,CharHeight);
+
+    String str = msg;
+    for (int i = 0, j = yloc; i <= lines; ++i, j += CharHeight) {
+        auto c = str.length();
+        while (StrW > Width) {
+            StrW = display->getUTF8Width(str.substring(0, c).c_str());
+            --c;
+        }
+        // Serial.printf("[D] %d, %d\n",xloc,j);
+        if (c == str.length()) {
+            display->drawUTF8(xloc, j, str.substring(0, c).c_str());
+            break;
+        }
+        display->drawUTF8(xloc, j, str.substring(0, c + 1).c_str());
+        str = str.substring(c - 1, str.length());
+        // Serial.println("[D] " + str);
+    }
+
+    // display->sendBuffer();
+}

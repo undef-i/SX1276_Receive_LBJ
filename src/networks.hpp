@@ -84,9 +84,13 @@ extern bool give_tel_rssi;
 extern bool give_tel_gain;
 extern bool tel_set_ppm;
 extern bool no_wifi;
+extern bool first_rx;
+extern bool always_new;
 extern float actual_frequency;
 extern uint64_t prb_timer;
+extern uint64_t car_timer;
 extern uint32_t prb_count;
+extern uint32_t car_count;
 extern float ppm;
 extern bool freq_correction;
 

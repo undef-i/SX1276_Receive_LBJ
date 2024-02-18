@@ -36,6 +36,7 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
     bool complete = false;
     uint8_t framePos = 0;
     uint32_t addr_next = 0;
+    bool empty = true;
 //        bool is_empty = true;
     for (size_t i = 0; i < POCDAT_SIZE; i++) {
         // determine the message length, based on user input or the amount of received data
@@ -85,6 +86,8 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
                 p[i].is_empty = true;
 //                    length = 6;
 //                    strncpy((char *) data, "<tone>", length + 1);
+            } else {
+                empty = false;
             }
             data[length] = 0;
             p[i].str = String((char *) data);
@@ -101,6 +104,9 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
         if (state != RADIOLIB_ERR_NONE)
             break;
     }
+
+    if (empty)
+        state = RADIOLIB_ERR_MSG_CORRUPT;
 //    // build a temporary buffer
 //#if defined(RADIOLIB_STATIC_ONLY)
 //    uint8_t data[RADIOLIB_STATIC_ARRAY_SIZE + 1];
