@@ -2,3 +2,7 @@
 logs
 .vscode
 /COREDUMP*.bin
+readcd_txt.bat
+readcd_bin.ps1
+readcd_bin.bat
+coredump.txt
