@@ -770,6 +770,8 @@ void handleButtonInput() {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 1");
+                if (!oled.isEnabled())
+                    return;
                 if (!oled.isMenu()) {
                     if (first_rx || !always_new) {
                         always_new = false;
@@ -781,6 +783,8 @@ void handleButtonInput() {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 2");
+                if (!oled.isEnabled())
+                    return;
                 if (!oled.isMenu()) {
                     always_new = false;
                     oled.showSelectedLBJ(-1);
@@ -802,6 +806,8 @@ void handleButtonInput() {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 3");
+                if (!oled.isEnabled())
+                    return;
                 if (!oled.isMenu()) {
                     always_new = false;
                     oled.showSelectedLBJ(1);
@@ -812,6 +818,11 @@ void handleButtonInput() {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 4");
+                if (!oled.isEnabled()) {
+                    oled.setEnable(true);
+                    oled.resumeUpdate();
+                    oled.updateInfo();
+                }
                 if (!oled.isMenu()) {
                     if (first_rx) {
                         flash.toLatest();

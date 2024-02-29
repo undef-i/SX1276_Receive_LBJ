@@ -65,12 +65,15 @@ public:
     void clearCenter(bool sendBuffer);
     void clearBottom(bottom_sectors sector, bool sendBuffer);
     void clearAll();
+    bool isEnabled() const;
+    void setEnable(bool is_enable);
 
 protected:
     void pwordUTF8(const String& msg, int xloc, int yloc, int xmax, int ymax);
     bool update = true;
     DISPLAY_MODEL *display = nullptr;
     aPreferences *flash;
+    bool enabled = true;
 
 private:
     void pword(const char *msg, int xloc, int yloc);

@@ -233,6 +233,9 @@ void Menu::handleKey(bool up) {
         case MENU_INDEX_INPUT:
             alterDigitIndex(selected_item,up);
             break;
+        case MENU_OLED:
+            // more coming...
+            break;
     }
 }
 
@@ -318,6 +321,17 @@ void Menu::acknowledge() {
                         menu_page = MENU_ABOUT;
                         sub_page = 1;
                         showAbout(1);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (sub_page == -2) {
+                switch (selected_item) {
+                    case 1:
+                        menu_page = MENU_OLED;
+                        showOLED();
+                        selected_item = 0;
+                        highlightItem(selected_item);
                         break;
                     default:
                         break;
@@ -456,6 +470,20 @@ void Menu::acknowledge() {
             highlightIndex(selected_item);
             menu_page = MENU_INDEX;
             break;
+        case MENU_OLED:
+            switch (selected_item) {
+                case 0:
+                    // clearAll();
+                    // display->sendBuffer();
+                    display->setPowerSave(true);
+                    menu_page = MENU_CLOSED;
+                    sub_page = 0;
+                    update = true;
+                    is_menu = false;
+                    enabled = false;
+                    break;
+            }
+            break;
         default:
             return;
     }
@@ -514,6 +542,13 @@ void Menu::showLast() {
             showIndexFile();
             highlightIndex(selected_item);
             menu_page = MENU_INDEX;
+            break;
+        case MENU_OLED:
+            sub_page = -2;
+            showSettings(sub_page);
+            selected_item = 1;
+            highlightItem(selected_item);
+            menu_page = MENU_SETTINGS;
             break;
         default:
             return;
@@ -928,6 +963,16 @@ void Menu::drawDigitIndex(int8_t item, bool inv, bool send) {
     if (send)
         display->sendBuffer();
     display->setFont(u8g2_font_wqy12_t_gb2312a);
+}
+
+void Menu::showOLED() {
+    clearAll();
+    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->drawUTF8(0, 12, "显示设置");
+    display->drawHLine(0, 14, 128);
+
+    items[0] = "关闭显示";
+    display->drawUTF8(0, 26, items[0].c_str());
 }
 
 

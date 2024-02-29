@@ -2,7 +2,6 @@
 // Created by FLN1021 on 2024/2/10.
 //
 
-#include <cstdint>
 #include "ScreenWrapper.h"
 
 bool ScreenWrapper::setDisplay(U8G2_SSD1306_128X64_NONAME_F_HW_I2C *display_ptr) {
@@ -14,9 +13,7 @@ bool ScreenWrapper::setDisplay(U8G2_SSD1306_128X64_NONAME_F_HW_I2C *display_ptr)
 }
 
 void ScreenWrapper::updateInfo() {
-    if (!display)
-        return;
-    if (!update)
+    if (!display || !update || !enabled)
         return;
 
     char buffer[32];
@@ -24,7 +21,7 @@ void ScreenWrapper::updateInfo() {
     if (update_top) {
         display->setDrawColor(0);
         display->setFont(u8g2_font_squeezed_b7_tr);
-        display->drawBox(0, 0, 97, 8);
+        display->drawBox(0, 0, 98, 8);
         display->setDrawColor(1);
         if (!getLocalTime(&time_info, 0))
             display->drawStr(0, 7, "NO SNTP");
@@ -256,10 +253,9 @@ void ScreenWrapper::showLBJ2(const struct lbj_data &l, const struct rx_info &r) 
 }
 
 void ScreenWrapper::showLBJ(const lbj_data &l, const rx_info &r) {
-    if (!display)
+    if (!display || !update || !enabled)
         return;
-    if (!update)
-        return;
+
     if (l.type == 0)
         showLBJ0(l, r);
     else if (l.type == 1) {
@@ -509,4 +505,14 @@ void ScreenWrapper::pwordUTF8(const String &msg, int xloc, int yloc, int xmax, i
     }
 
     // display->sendBuffer();
+}
+
+bool ScreenWrapper::isEnabled() const {
+    return enabled;
+}
+
+void ScreenWrapper::setEnable(bool is_enable) {
+    if (is_enable)
+        display->setPowerSave(false);
+    enabled = is_enable;
 }
