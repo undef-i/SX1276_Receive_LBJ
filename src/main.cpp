@@ -338,7 +338,7 @@ void setup() {
         oled.setDisplay(u8g2);
         oled.setFlash(&flash);
         oled.showInitComp();
-        u8g2->setFont(u8g2_font_wqy12_t_gb2312a);
+        u8g2->setFont(FONT_12_GB2312);
         u8g2->setCursor(0, 52);
         u8g2->println("Initializing...");
         u8g2->sendBuffer();

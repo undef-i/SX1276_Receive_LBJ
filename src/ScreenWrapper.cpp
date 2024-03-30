@@ -134,7 +134,7 @@ void ScreenWrapper::showSTR(const String &str) {
     display->setDrawColor(0);
     display->drawBox(0, 8, 128, 48);
     display->setDrawColor(1);
-    // display->setFont(u8g2_font_wqy12_t_gb2312a);
+    // display->setFont(FONT_12_GB2312);
     display->setFont(u8g2_font_squeezed_b7_tr);
     pword(str.c_str(), 0, 19);
     display->sendBuffer();
@@ -177,7 +177,7 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->setDrawColor(0);
     display->drawBox(0, 8, 128, 48);
     display->setDrawColor(1);
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     // line 1
     sprintf(buffer, "车:%s%s", l.lbj_class, l.train);
     display->drawUTF8(0, 19, buffer);
@@ -331,7 +331,7 @@ void ScreenWrapper::showSelectedLBJ(aPreferences *flash_cls, int8_t bias) {
 void ScreenWrapper::showListening() {
     if (!display)
         return;
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->setDrawColor(0);
     // display->drawBox(0, 42, 128, 14);
     display->drawBox(0, 8, 128, 48);
@@ -440,7 +440,7 @@ void ScreenWrapper::showInfo(int8_t page) {
      * route_utf8,pos_lon_deg,pos_lon_min,pos_lat_deg,pos_lat_min,pos_lon,pos_lat,rssi,fer,ppm,id
      */
     clearAll();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "接收信息");
     char buffer[34];
     sprintf(buffer, "%d", page);

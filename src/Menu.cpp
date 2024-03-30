@@ -243,7 +243,7 @@ void Menu::showSettings(int16_t page) {
     if (!display)
         return;
     clearAll();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "系统设置");
     char buffer[34];
     sprintf(buffer, "%d", page);
@@ -557,7 +557,7 @@ void Menu::showLast() {
 
 void Menu::showAbout(int16_t page) {
     clearAll();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "关于");
     // char buffer[34];
     // sprintf(buffer, "%d", page);
@@ -599,7 +599,7 @@ void Menu::showFreq(bool send) {
     // display->setDrawColor(0);
     // display->drawBox(0,0,128,64);
     // display->setDrawColor(1);
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "频率校正");
     display->drawHLine(0, 14, 128);
 
@@ -653,7 +653,7 @@ void Menu::showReadPPM() {
         items[i] = buffer;
         display->drawStr(c, 40, buffer);
     }
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
 
     display->drawHLine(14, 48, 100);
     display->drawVLine(64, 50, 10);
@@ -736,7 +736,7 @@ void Menu::drawDigitPPM(int8_t item, bool inv, bool send) {
     display->setDrawColor(1);
     if (send)
         display->sendBuffer();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
 }
 
 void Menu::confirmDigitAltPPM() {
@@ -776,7 +776,7 @@ void Menu::clearPPMFlag() {
 
 void Menu::showMessage(const char *title, const char *message) {
     is_msg = true;
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->setDrawColor(0);
     display->drawBox(12, 4, 104, 58);
     display->setDrawColor(1);
@@ -818,7 +818,7 @@ void Menu::updatePage() {
 
 void Menu::showTFSettings(int16_t page) {
     clearAll();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "TF卡设置");
     display->drawHLine(0, 14, 128);
 
@@ -891,7 +891,7 @@ void Menu::showIndexFile() {
         items[i] = buffer;
         display->drawStr(k, 40, buffer);
     }
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
 
     display->drawHLine(14, 48, 100);
     display->drawVLine(64, 50, 10);
@@ -950,7 +950,7 @@ void Menu::alterDigitIndex(int8_t item, bool plus) {
     sprintf(buffer,"%1d",digits[item]);
     items[item] = buffer;
     drawDigitIndex(item);
-    // display->setFont(u8g2_font_wqy12_t_gb2312a);
+    // display->setFont(FONT_12_GB2312);
     display->sendBuffer();
 }
 
@@ -962,12 +962,12 @@ void Menu::drawDigitIndex(int8_t item, bool inv, bool send) {
     display->drawStr(30 + item * 16, 40, items[item].c_str());
     if (send)
         display->sendBuffer();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
 }
 
 void Menu::showOLED() {
     clearAll();
-    display->setFont(u8g2_font_wqy12_t_gb2312a);
+    display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "显示设置");
     display->drawHLine(0, 14, 128);
 
