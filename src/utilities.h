@@ -143,6 +143,9 @@
 #define HAS_AD_BUTTON // soldered an external AD button.
 #define BUTTON_PIN                  34
 
+#define INITIAL_PPM                 6
+#define AFC_ENABLE                  true
+
 #elif defined(LILYGO_T3_V2_0)
 #define I2C_SDA                     21
 #define I2C_SCL                     22
