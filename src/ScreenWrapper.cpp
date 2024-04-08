@@ -4,7 +4,7 @@
 
 #include "ScreenWrapper.h"
 
-bool ScreenWrapper::setDisplay(U8G2_SSD1306_128X64_NONAME_F_HW_I2C *display_ptr) {
+bool ScreenWrapper::setDisplay(DISPLAY_MODEL *display_ptr) {
     this->display = display_ptr;
     if (!this->display)
         return false;
