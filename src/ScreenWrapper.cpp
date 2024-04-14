@@ -535,8 +535,8 @@ bool ScreenWrapper::isSleep() const {
 }
 
 void ScreenWrapper::autoSleep() {
-    if (!update_top || !update)
-        return;
+    // if (!update_top || !update)
+    //     return;
     if (millis64() - last_operation_time > AUTO_SLEEP_TIMEOUT && !isSleep()) {
         setSleep(true);
         // updateSleepTimestamp();

@@ -783,10 +783,16 @@ void handleButtonInput() {
             // Serial.printf("[D] GPIO 34-2: %d ADU\n", btn_level);
             if (btn_level >= 1460 && btn_level <= 1490 && abs(btn_level - btn_level_prev) < 10) {
                 btn_pressed = true;
+                oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 1");
-                if (!oled.isEnabled())
+                if (!oled.isEnabled() || oled.isSleep())
                     return;
+                // if (oled.isSleep()) {
+                //     oled.setSleep(false);
+                //     oled.updateInfo();
+                //     return;
+                // }
                 if (!oled.isMenu()) {
                     if (first_rx || !always_new) {
                         always_new = false;
@@ -796,10 +802,16 @@ void handleButtonInput() {
                     oled.closeMenu();
             } else if (btn_level >= 2250 && btn_level <= 2280) {
                 btn_pressed = true;
+                oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 2");
-                if (!oled.isEnabled())
+                if (!oled.isEnabled() || oled.isSleep())
                     return;
+                // if (oled.isSleep()) {
+                //     oled.setSleep(false);
+                //     oled.updateInfo();
+                //     return;
+                // }
                 if (!oled.isMenu()) {
                     always_new = false;
                     oled.showSelectedLBJ(-1);
@@ -819,10 +831,16 @@ void handleButtonInput() {
                 // }
             } else if (btn_level >= 2990 && btn_level <= 3110) {
                 btn_pressed = true;
+                oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 3");
-                if (!oled.isEnabled())
+                if (!oled.isEnabled() || oled.isSleep())
                     return;
+                // if (oled.isSleep()) {
+                //     oled.setSleep(false);
+                //     oled.updateInfo();
+                //     return;
+                // }
                 if (!oled.isMenu()) {
                     always_new = false;
                     oled.showSelectedLBJ(1);
@@ -831,6 +849,7 @@ void handleButtonInput() {
                 }
             } else if (btn_level >= 4090 && btn_level <= 4096) {
                 btn_pressed = true;
+                oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 4");
                 if (!oled.isEnabled()) {
@@ -841,7 +860,8 @@ void handleButtonInput() {
                 if (oled.isSleep()) {
                     oled.setSleep(false);
                     oled.updateInfo();
-                    oled.resumeUpdate();
+                    // oled.resumeUpdate();
+                    return;
                 }
                 if (!oled.isMenu()) {
                     if (first_rx) {
@@ -1155,8 +1175,8 @@ void formatDataTask(void *pVoid) {
 #ifdef HAS_DISPLAY
     fd_state = TASK_RUNNING_SCREEN;
     if (u8g2) {
+        oled.updateSleepTimestamp();
         if (oled.isSleep()){
-            oled.updateSleepTimestamp();
             oled.setSleep(false);
             oled.updateInfo();
         }

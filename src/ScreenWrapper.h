@@ -11,7 +11,7 @@
 #include "aPreferences.h"
 
 #define AUTO_SLEEP_TIMEOUT 60000
-#define AUTO_SLEEP false
+#define AUTO_SLEEP true
 #ifdef HAS_DISPLAY
 
 enum top_sectors{
