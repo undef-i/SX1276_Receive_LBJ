@@ -10,6 +10,8 @@
 #include "customfont.h"
 #include "aPreferences.h"
 
+#define AUTO_SLEEP_TIMEOUT 60000
+#define AUTO_SLEEP false
 #ifdef HAS_DISPLAY
 
 enum top_sectors{
@@ -61,12 +63,20 @@ public:
 
     void resumeUpdate();
 
+    bool isAutoSleep() const;
+
+    void autoSleep();
+
+    void updateSleepTimestamp();
+
     void clearTop(top_sectors sector, bool sendBuffer);
     void clearCenter(bool sendBuffer);
     void clearBottom(bottom_sectors sector, bool sendBuffer);
     void clearAll();
     bool isEnabled() const;
     void setEnable(bool is_enable);
+    void setSleep(bool is_sleep);
+    bool isSleep() const;
 
 protected:
     void pwordUTF8(const String& msg, int xloc, int yloc, int xmax, int ymax);
@@ -74,6 +84,9 @@ protected:
     DISPLAY_MODEL *display = nullptr;
     aPreferences *flash;
     bool enabled = true;
+    bool auto_sleep = AUTO_SLEEP;
+    bool sleep = false;
+    uint64_t last_operation_time = 0;
 
 private:
     void pword(const char *msg, int xloc, int yloc);

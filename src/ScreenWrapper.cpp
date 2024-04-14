@@ -314,6 +314,7 @@ void ScreenWrapper::showLBJ(const struct lbj_data &l, const struct rx_info &r, c
 
 void ScreenWrapper::resumeUpdate() {
     update_top = true;
+    updateSleepTimestamp();
 }
 
 void ScreenWrapper::showSelectedLBJ(aPreferences *flash_cls, int8_t bias) {
@@ -512,7 +513,36 @@ bool ScreenWrapper::isEnabled() const {
 }
 
 void ScreenWrapper::setEnable(bool is_enable) {
-    if (is_enable)
-        display->setPowerSave(false);
+    // if (is_enable)
+    //     display->setPowerSave(false);
+    display->setPowerSave(!is_enable);
     enabled = is_enable;
+}
+
+bool ScreenWrapper::isAutoSleep() const {
+    return auto_sleep;
+}
+
+void ScreenWrapper::setSleep(bool is_sleep) {
+    if (!auto_sleep || !enabled)
+        return;
+    display->setPowerSave(is_sleep);
+    sleep = is_sleep;
+}
+
+bool ScreenWrapper::isSleep() const {
+    return sleep;
+}
+
+void ScreenWrapper::autoSleep() {
+    if (!update_top || !update)
+        return;
+    if (millis64() - last_operation_time > AUTO_SLEEP_TIMEOUT && !isSleep()) {
+        setSleep(true);
+        // updateSleepTimestamp();
+    }
+}
+
+void ScreenWrapper::updateSleepTimestamp() {
+    last_operation_time = millis64();
 }

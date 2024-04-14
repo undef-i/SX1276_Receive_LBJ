@@ -475,12 +475,13 @@ void Menu::acknowledge() {
                 case 0:
                     // clearAll();
                     // display->sendBuffer();
-                    display->setPowerSave(true);
+                    setEnable(false);
+                    // display->setPowerSave(true);
                     menu_page = MENU_CLOSED;
                     sub_page = 0;
                     update = true;
                     is_menu = false;
-                    enabled = false;
+                    // enabled = false;
                     break;
             }
             break;

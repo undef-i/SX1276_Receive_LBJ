@@ -644,6 +644,8 @@ void loop() {
 //        setCpuFrequencyMhz(80);
         changeCpuFreq(80);
 
+    oled.autoSleep();
+
     handleCarrier();
     handlePreamble();
 
@@ -775,9 +777,11 @@ void handleButtonInput() {
             btn_timer = millis64();
         }
         if (millis64() - btn_timer <= 200 && !btn_pressed) {
+            uint16_t btn_level_prev = analogRead(BUTTON_PIN);
+            // Serial.printf("[D] GPIO 34-1: %d ADU\n", btn_level);
             uint16_t btn_level = analogRead(BUTTON_PIN);
-            // Serial.printf("[D] GPIO 34: %d ADU\n", btn_level);
-            if (btn_level >= 1460 && btn_level <= 1490) {
+            // Serial.printf("[D] GPIO 34-2: %d ADU\n", btn_level);
+            if (btn_level >= 1460 && btn_level <= 1490 && abs(btn_level - btn_level_prev) < 10) {
                 btn_pressed = true;
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 1");
@@ -833,6 +837,11 @@ void handleButtonInput() {
                     oled.setEnable(true);
                     oled.resumeUpdate();
                     oled.updateInfo();
+                }
+                if (oled.isSleep()) {
+                    oled.setSleep(false);
+                    oled.updateInfo();
+                    oled.resumeUpdate();
                 }
                 if (!oled.isMenu()) {
                     if (first_rx) {
@@ -1146,6 +1155,11 @@ void formatDataTask(void *pVoid) {
 #ifdef HAS_DISPLAY
     fd_state = TASK_RUNNING_SCREEN;
     if (u8g2) {
+        if (oled.isSleep()){
+            oled.updateSleepTimestamp();
+            oled.setSleep(false);
+            oled.updateInfo();
+        }
         oled.showLBJ(db->lbjData, rxInfo);
         Serial.printf("Complete u8g2 [%llu]\n", millis64() - runtime_timer);
     }
