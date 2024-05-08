@@ -51,7 +51,7 @@ void Menu::closeMenu() {
     display->setFont(u8g2_font_squeezed_b7_tr);
     updateInfo();
     if (always_new) {
-        showListening();
+        showListening(); // todo: add show listening while idle.
     } else
         showSelectedLBJ(0);
     // if (!first_rx) {
@@ -568,7 +568,7 @@ void Menu::showAbout(int16_t page) {
 
     char buffer[32];
     if (page == 1) {
-        sprintf(buffer, "Pager_Receive 项目");
+        sprintf(buffer, "SX1276_RX_LBJ 项目");
         display->drawUTF8(0, 26, buffer);
         sprintf(buffer, "基于ESP32-Arduino");
         display->drawUTF8(0, 38, buffer);

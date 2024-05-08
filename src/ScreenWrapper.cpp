@@ -303,6 +303,7 @@ void ScreenWrapper::showLBJ(const struct lbj_data &l, const struct rx_info &r, c
     //     display->drawStr(0, 64, "WIFI OFF");
     display->sendBuffer();
 
+    // todo: change alphanumeric font.
     if (l.type == 0)
         showLBJ0(l, r);
     else if (l.type == 1) {
@@ -338,7 +339,7 @@ void ScreenWrapper::showListening() {
     display->drawBox(0, 8, 128, 48);
     display->drawBox(98, 0, 30, 8);
     display->setDrawColor(1);
-    display->drawStr(0, 52, "Listening...");
+    display->drawUTF8(0, 52, "正在监听...");
     display->sendBuffer();
 }
 

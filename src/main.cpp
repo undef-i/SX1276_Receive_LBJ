@@ -340,7 +340,7 @@ void setup() {
         oled.showInitComp();
         u8g2->setFont(FONT_12_GB2312);
         u8g2->setCursor(0, 52);
-        u8g2->println("Initializing...");
+        u8g2->println("正在初始化...");
         u8g2->sendBuffer();
     }
 

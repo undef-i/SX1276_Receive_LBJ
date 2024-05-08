@@ -85,6 +85,7 @@ void initBoard() {
         u8g2->setFontMode(1); // Transparent
         u8g2->setDrawColor(1);
         u8g2->setFontDirection(0);
+        u8g2->enableUTF8Print();
         u8g2->firstPage();
         if (voltage < 3.10) {
             u8g2->setFont(FONT_12_GB2312);
@@ -101,10 +102,11 @@ void initBoard() {
 //            u8g2->drawVLine(46, 33, 12);
 //            u8g2->setFont(u8g2_font_inb19_mf);
 //            u8g2->drawStr(58, 60, "FSK");
-            u8g2->setFont(u8g2_font_luRS19_tr);
-            u8g2->drawStr(13, 32, "POCSAG");
-            u8g2->setFont(u8g2_font_luIS12_tr);
-            u8g2->drawStr(40, 48, "Receiver");
+//             u8g2->setFont(u8g2_font_luRS19_tr);
+            u8g2->setFont(u8g2_font_spleen16x32_mr);
+            u8g2->drawStr(13, 45, "Rx_LBJ");
+            u8g2->setFont(u8g2_font_spleen8x16_mu);
+            u8g2->drawStr(15, 20, "SX1276");
         } while (u8g2->nextPage());
         u8g2->sendBuffer();
         u8g2->setFont(u8g2_font_fur11_tf);
@@ -128,7 +130,7 @@ void initBoard() {
         if (u8g2) {
             do {
                 u8g2->setCursor(0, 62);
-                u8g2->println("SDCard FAILED");
+                u8g2->println("SD卡初始化失败");
             } while (u8g2->nextPage());
         }
 
@@ -138,7 +140,7 @@ void initBoard() {
         if (u8g2) {
             do {
                 u8g2->setCursor(0, 62);
-                u8g2->print("SDCard:");
+                u8g2->print("SD卡容量:");
                 u8g2->print(cardSize / 1024.0);
                 u8g2->println(" GB");
             } while (u8g2->nextPage());
