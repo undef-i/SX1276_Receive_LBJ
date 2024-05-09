@@ -129,6 +129,7 @@ If `<NUL>`, `NA`, `********` or part of these characters shows up, it means this
 - [LilyGo-LoRa-Series](https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series)
 - [ESPTelnet](https://github.com/LennartHennigs/ESPTelnet)
 - [RTClib](https://github.com/adafruit/RTClib.git)
+- [Multimon-ng](https://github.com/EliasOenal/multimon-ng)
 - Project inspired by [GoRail_Pager](https://github.com/killeder/GoRail_Pager).
 - More if I can remember, I apologize for that.
 
