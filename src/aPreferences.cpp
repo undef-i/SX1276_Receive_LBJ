@@ -49,7 +49,7 @@ bool aPreferences::append(lbj_data lbj, rx_info rx, float volt, float temp) {
         lines = 0;
         overflow = true;
     }
-    sprintf(buffer, "%04d,%1.2f,%llu,", lines, volt, esp_timer_get_time());
+    sprintf(buffer, "%04d,%1.2f,%lld,", lines, volt, esp_timer_get_time());
     line += buffer;
     sprintf(buffer, "%.2f,%d-%02d-%02d,%02d:%02d:%02d,", temp, now.tm_year + 1900, now.tm_mon + 1,
             now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);

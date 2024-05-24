@@ -58,8 +58,8 @@ private:
     int16_t sub_page = 0;
     String items[10];
     int8_t selected_item = 0;
-    int32_t bias;
-    uint16_t lines;
+    int32_t bias = 0;
+    uint16_t lines = 0;
     uint64_t update_timer = 0;
 };
 

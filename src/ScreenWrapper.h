@@ -92,6 +92,9 @@ private:
     void pword(const char *msg, int xloc, int yloc);
     bool low_volt_warned = false;
     bool update_top = true;
+    const uint8_t *font_12_alphanum = u8g2_font_profont12_custom_tf;
+    const uint8_t *font_15_alphanum_bold = u8g2_font_spleen8x16_mu;
+    const uint8_t *font_15_alphanum = u8g2_font_profont15_mr;
 };
 
 #endif

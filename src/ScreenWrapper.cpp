@@ -59,7 +59,7 @@ void ScreenWrapper::updateInfo() {
         display->drawStr(89, 64, "L");
     else if (WiFiClass::status() == WL_CONNECTED)
         display->drawStr(89, 64, "N");
-    sprintf(buffer, "%2d", ets_get_cpu_frequency() / 10);
+    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
     display->drawStr(96, 64, buffer);
     voltage = battery.readVoltage() * 2;
     sprintf(buffer, "%1.2f", voltage); // todo: Implement average voltage reading.
@@ -87,7 +87,7 @@ void ScreenWrapper::showInitComp() {
     else if (WiFiClass::status() == WL_CONNECTED)
         display->drawStr(89, 64, "N");
     char buffer[32];
-    sprintf(buffer, "%2d", ets_get_cpu_frequency() / 10);
+    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
     display->drawStr(96, 64, buffer);
     sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
     display->drawStr(108, 64, buffer);
@@ -149,17 +149,46 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     display->drawBox(0, 8, 128, 48);
     display->setDrawColor(1);
     display->setFont(u8g2_font_wqy15_t_custom);
+    display->setCursor(0, 21);
+    display->printf("车  次");
+    display->setFont(font_15_alphanum_bold);
+    display->setCursor(50, display->getCursorY());
+    display->printf("%s", l.train);
+    display->setFont(u8g2_font_wqy15_t_custom);
+    display->setCursor(display->getCursorX() + 6, display->getCursorY());
     if (l.direction == FUNCTION_UP) {
-        sprintf(buffer, "车  次 %s 上行", l.train);
+        display->printf("上行");
     } else if (l.direction == FUNCTION_DOWN)
-        sprintf(buffer, "车  次 %s 下行", l.train);
+        display->printf("下行");
     else
-        sprintf(buffer, "车  次 %s %d", l.train, l.direction);
-    display->drawUTF8(0, 21, buffer);
-    sprintf(buffer, "速  度  %s KM/H", l.speed);
-    display->drawUTF8(0, 37, buffer);
-    sprintf(buffer, "公里标 %s KM", l.position);
-    display->drawUTF8(0, 53, buffer);
+        display->printf("%d", l.direction);
+    // if (l.direction == FUNCTION_UP) {
+    //     sprintf(buffer, "车  次 %s 上行", l.train);
+    // } else if (l.direction == FUNCTION_DOWN)
+    //     sprintf(buffer, "车  次 %s 下行", l.train);
+    // else
+    //     sprintf(buffer, "车  次 %s %d", l.train, l.direction);
+    // display->drawUTF8(0, 21, buffer);
+    // sprintf(buffer, "速  度  %s KM/H", l.speed);
+    display->setCursor(0, 37);
+    display->printf("速  度");
+    u8g2->setCursor(50, u8g2->getCursorY());
+    display->setFont(font_15_alphanum_bold);
+    display->printf(" %s ", l.speed);
+    u8g2->setCursor(u8g2->getCursorX() + 7, u8g2->getCursorY());
+    display->setFont(font_15_alphanum);
+    display->printf("KM/H");
+    display->setFont(u8g2_font_wqy15_t_custom);
+    // sprintf(buffer, "公里标 %s KM", l.position);
+    display->setCursor(0, 53);
+    display->printf("公里标");
+    u8g2->setCursor(50, u8g2->getCursorY());
+    display->setFont(font_15_alphanum_bold);
+    display->printf("%s ", l.position);
+    display->setCursor(display->getCursorX() + 4, display->getCursorY());
+    display->setFont(font_15_alphanum);
+    display->printf("KM");
+    // display->drawUTF8(0, 53, buffer);
     // draw RSSI
     display->setDrawColor(0);
     display->drawBox(98, 0, 30, 8);
@@ -179,13 +208,58 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->setDrawColor(1);
     display->setFont(FONT_12_GB2312);
     // line 1
-    sprintf(buffer, "车:%s%s", l.lbj_class, l.train);
-    display->drawUTF8(0, 19, buffer);
-    sprintf(buffer, "速:%sKM/H", l.speed);
-    display->drawUTF8(68, 19, buffer);
+    display->setCursor(0, 19);
+    // sprintf(buffer, "车:%s%s", l.lbj_class, l.train);
+    display->printf("车:");
+    display->setCursor(display->getCursorX() + 1, display->getCursorY());
+    display->setFont(font_12_alphanum);
+    // for (int i = 0, c = 0; i < 8; i++) {
+    //     if (i == 7) {
+    //         buffer[c] = 0;
+    //         break;
+    //     }
+    //     if (i < 2) {
+    //         if (l.lbj_class[i] == ' ')
+    //             continue;
+    //         buffer[c] = l.lbj_class[i];
+    //     } else {
+    //         if (l.train[i - 2] == ' ')
+    //             continue;
+    //         buffer[c] = l.train[i - 2];
+    //     }
+    //     ++c;
+    // }
+    // display->printf("%s", buffer);
+    for (int i = 0, c = 0; i < 6; i++) {
+        if (i == 5) {
+            buffer[c] = 0;
+            break;
+        }
+        if (l.train[i] == ' ')
+            continue;
+        buffer[c] = l.train[i];
+        ++c;
+    }
+    display->printf("%s%s", l.lbj_class, buffer);
+    // display->printf("%s%s", l.lbj_class, l.train);
+    display->setFont(FONT_12_GB2312);
+    // sprintf(buffer, "速:%sKM/H", l.speed);
+    display->setCursor(68, 19);
+    display->printf("速:");
+    display->setCursor(display->getCursorX() + 2, display->getCursorY());
+    display->setFont(font_12_alphanum);
+    display->printf("%s", l.speed);
+    display->setCursor(display->getCursorX(), display->getCursorY());
+    display->printf("KM/H");
+    display->setFont(FONT_12_GB2312);
+    // display->drawUTF8(68, 19, buffer);
     // line 2
-    sprintf(buffer, "线:%s", l.route_utf8);
-    display->drawUTF8(0, 31, buffer);
+    // sprintf(buffer, "线:%s", l.route_utf8);
+    display->setCursor(0, 31);
+    display->printf("线:");
+    display->setCursor(display->getCursorX() + 2, display->getCursorY());
+    display->printf("%s", l.route_utf8);
+    // display->drawUTF8(0, 31, buffer);
     display->drawBox(67, 21, 13, 12);
     display->setDrawColor(0);
     if (l.direction == FUNCTION_UP)
@@ -197,11 +271,23 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         display->drawStr(71, 31, buffer);
     }
     display->setDrawColor(1);
-    sprintf(buffer, "%sK", l.position);
-    display->drawUTF8(86, 31, buffer);
+    // sprintf(buffer, "%sK", l.position);
+    // display->drawUTF8(86, 31, buffer);
+    display->setCursor(84, 31);
+    display->setFont(font_12_alphanum);
+    display->printf("%s", l.position);
+    display->setCursor(display->getCursorX(), display->getCursorY());
+    display->printf("K");
+    display->setFont(FONT_12_GB2312);
     // line 3
-    sprintf(buffer, "号:%s", l.loco);
-    display->drawUTF8(0, 43, buffer);
+    // sprintf(buffer, "号:%s", l.loco);
+    display->setCursor(0, 43);
+    display->printf("号:");
+    display->setCursor(display->getCursorX() + 1, display->getCursorY());
+    display->setFont(font_12_alphanum);
+    display->printf("%s", l.loco);
+    display->setFont(FONT_12_GB2312);
+    // display->drawUTF8(0, 43, buffer);
     if (l.loco_type.length())
         display->drawUTF8(72, 43, l.loco_type.c_str());
     // line 4
@@ -221,6 +307,7 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         pos += String(buffer);
     }
 //    sprintf(buffer,"%s°%s'%s°%s'",l.pos_lat_deg,l.pos_lat_min,l.pos_lon_deg,l.pos_lon_min);
+    display->setFont(font_12_alphanum);
     display->drawUTF8(0, 54, pos.c_str());
     // draw RSSI
     display->setDrawColor(0);
@@ -240,8 +327,13 @@ void ScreenWrapper::showLBJ2(const struct lbj_data &l, const struct rx_info &r) 
     display->drawBox(0, 8, 128, 48);
     display->setDrawColor(1);
     display->setFont(u8g2_font_wqy15_t_custom);
-    sprintf(buffer, "当前时间 %s ", l.time);
-    display->drawUTF8(0, 21, buffer);
+    display->setCursor(0, 23);
+    display->printf("当前时间");
+    display->setFont(font_15_alphanum_bold);
+    display->setCursor(display->getCursorX() + 3, display->getCursorY() - 1);
+    display->printf("%s ", l.time);
+    // sprintf(buffer, "当前时间 %s ", l.time);
+    // display->drawUTF8(0, 21, buffer);
     // draw RSSI
     display->setDrawColor(0);
     display->drawBox(98, 0, 30, 8);
