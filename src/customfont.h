@@ -39,7 +39,7 @@ extern "C" {
 #endif
 
 extern const uint8_t u8g2_font_wqy15_t_custom[] U8G2_FONT_SECTION("u8g2_font_wqy15_t_custom");
-
+extern const uint8_t u8g2_font_profont12_custom_tf[] U8G2_FONT_SECTION("u8g2_font_profont12_custom_tf");
 
 #ifdef __cplusplus
 }

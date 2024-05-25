@@ -162,7 +162,7 @@ void showInitComp() {
     else if (WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "N");
     char buffer[32];
-    sprintf(buffer, "%2d", ets_get_cpu_frequency() / 10);
+    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
     u8g2->drawStr(96, 64, buffer);
     sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
     u8g2->drawStr(108, 64, buffer);
@@ -212,7 +212,7 @@ void updateInfo() {
         u8g2->drawStr(89, 64, "L");
     else if (WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "N");
-    sprintf(buffer, "%2d", ets_get_cpu_frequency() / 10);
+    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
     u8g2->drawStr(96, 64, buffer);
     voltage = battery.readVoltage() * 2;
     sprintf(buffer, "%1.2f", voltage); // todo: Implement average voltage reading.
@@ -242,17 +242,37 @@ void showLBJ0(const struct lbj_data &l) {
     u8g2->drawBox(0, 8, 128, 48);
     u8g2->setDrawColor(1);
     u8g2->setFont(u8g2_font_wqy15_t_custom);
+    u8g2->setCursor(0, 21);
+    u8g2->printf("车  次");
+    u8g2->setFont(u8g2_font_spleen8x16_mu);
+    u8g2->setCursor(50, u8g2->getCursorY());
+    u8g2->printf("%s", l.train);
+    u8g2->setFont(u8g2_font_wqy15_t_custom);
+    u8g2->setCursor(u8g2->getCursorX() + 6, u8g2->getCursorY());
     if (l.direction == FUNCTION_UP) {
-        sprintf(buffer, "车  次 %s 上行", l.train);
+        u8g2->printf("上行");
     } else if (l.direction == FUNCTION_DOWN)
-        sprintf(buffer, "车  次 %s 下行", l.train);
+        u8g2->printf("下行");
     else
-        sprintf(buffer, "车  次 %s %d", l.train, l.direction);
-    u8g2->drawUTF8(0, 21, buffer);
-    sprintf(buffer, "速  度  %s KM/H", l.speed);
-    u8g2->drawUTF8(0, 37, buffer);
-    sprintf(buffer, "公里标 %s KM", l.position);
-    u8g2->drawUTF8(0, 53, buffer);
+        u8g2->printf("%d", l.direction);
+    u8g2->setCursor(0, 37);
+    u8g2->printf("速  度");
+    u8g2->setCursor(50, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_spleen8x16_mu);
+    u8g2->printf(" %s ", l.speed);
+    u8g2->setCursor(u8g2->getCursorX() + 7, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_profont15_mr);
+    u8g2->printf("KM/H");
+    u8g2->setFont(u8g2_font_wqy15_t_custom);
+    // sprintf(buffer, "公里标 %s KM", l.position);
+    u8g2->setCursor(0, 53);
+    u8g2->printf("公里标");
+    u8g2->setCursor(50, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_spleen8x16_mu);
+    u8g2->printf("%s ", l.position);
+    u8g2->setCursor(u8g2->getCursorX() + 4, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_profont15_mr);
+    u8g2->printf("KM");
     // draw RSSI
     u8g2->setDrawColor(0);
     u8g2->drawBox(98, 0, 30, 8);
@@ -270,13 +290,35 @@ void showLBJ1(const struct lbj_data &l) {
     u8g2->setDrawColor(1);
     u8g2->setFont(FONT_12_GB2312);
     // line 1
-    sprintf(buffer, "车:%s%s", l.lbj_class, l.train);
-    u8g2->drawUTF8(0, 19, buffer);
-    sprintf(buffer, "速:%sKM/H", l.speed);
-    u8g2->drawUTF8(68, 19, buffer);
+    u8g2->setCursor(0, 19);
+    u8g2->printf("车:");
+    u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_profont12_custom_tf);
+    for (int i = 0, c = 0; i < 6; i++) {
+        if (i == 5) {
+            buffer[c] = 0;
+            break;
+        }
+        if (l.train[i] == ' ')
+            continue;
+        buffer[c] = l.train[i];
+        ++c;
+    }
+    u8g2->printf("%s%s", l.lbj_class, buffer);
+    u8g2->setFont(FONT_12_GB2312);
+    u8g2->setCursor(68, 19);
+    u8g2->printf("速:");
+    u8g2->setCursor(u8g2->getCursorX() + 2, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_profont12_custom_tf);
+    u8g2->printf("%s", l.speed);
+    u8g2->setCursor(u8g2->getCursorX(), u8g2->getCursorY());
+    u8g2->printf("KM/H");
+    u8g2->setFont(FONT_12_GB2312);
     // line 2
-    sprintf(buffer, "线:%s", l.route_utf8);
-    u8g2->drawUTF8(0, 31, buffer);
+    u8g2->setCursor(0, 31);
+    u8g2->printf("线:");
+    u8g2->setCursor(u8g2->getCursorX() + 2, u8g2->getCursorY());
+    u8g2->printf("%s", l.route_utf8);
     u8g2->drawBox(67, 21, 13, 12);
     u8g2->setDrawColor(0);
     if (l.direction == FUNCTION_UP)
@@ -288,11 +330,19 @@ void showLBJ1(const struct lbj_data &l) {
         u8g2->drawStr(71, 31, buffer);
     }
     u8g2->setDrawColor(1);
-    sprintf(buffer, "%sK", l.position);
-    u8g2->drawUTF8(86, 31, buffer);
+    u8g2->setCursor(84, 31);
+    u8g2->setFont(u8g2_font_profont12_custom_tf);
+    u8g2->printf("%s", l.position);
+    u8g2->setCursor(u8g2->getCursorX(), u8g2->getCursorY());
+    u8g2->printf("K");
+    u8g2->setFont(FONT_12_GB2312);
     // line 3
-    sprintf(buffer, "号:%s", l.loco);
-    u8g2->drawUTF8(0, 43, buffer);
+    u8g2->setCursor(0, 43);
+    u8g2->printf("号:");
+    u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
+    u8g2->setFont(u8g2_font_profont12_custom_tf);
+    u8g2->printf("%s", l.loco);
+    u8g2->setFont(FONT_12_GB2312);
     if (l.loco_type.length())
         u8g2->drawUTF8(72, 43, l.loco_type.c_str());
     // line 4
@@ -312,6 +362,7 @@ void showLBJ1(const struct lbj_data &l) {
         pos += String(buffer);
     }
 //    sprintf(buffer,"%s°%s'%s°%s'",l.pos_lat_deg,l.pos_lat_min,l.pos_lon_deg,l.pos_lon_min);
+    u8g2->setFont(u8g2_font_profont12_custom_tf);
     u8g2->drawUTF8(0, 54, pos.c_str());
     // draw RSSI
     u8g2->setDrawColor(0);
@@ -329,8 +380,11 @@ void showLBJ2(const struct lbj_data &l) {
     u8g2->drawBox(0, 8, 128, 48);
     u8g2->setDrawColor(1);
     u8g2->setFont(u8g2_font_wqy15_t_custom);
-    sprintf(buffer, "当前时间 %s ", l.time);
-    u8g2->drawUTF8(0, 21, buffer);
+    u8g2->setCursor(0, 23);
+    u8g2->printf("当前时间");
+    u8g2->setFont(u8g2_font_spleen8x16_mu);
+    u8g2->setCursor(u8g2->getCursorX() + 3, u8g2->getCursorY() - 1);
+    u8g2->printf("%s ", l.time);
     // draw RSSI
     u8g2->setDrawColor(0);
     u8g2->drawBox(98, 0, 30, 8);
