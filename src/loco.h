@@ -263,7 +263,7 @@ static const char *locos[] = { // todo try not to use static, we are running out
         "KZ25TB",
         "HXD1D-J",
         "",// HXD3DJ?
-        "",
+        "FXD1H",
         "",
         "",
         "",

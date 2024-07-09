@@ -60,33 +60,35 @@ More information about pin definitions can be found in [utilities.h](src/utiliti
 - Documentation and license are preliminary, needs to clean up and complete.
 
 ## Details
-### 1. About LBJ long message
-It does not appear on `TB/T 3504-2018` standard. 
-I received this kind of messages using SDR while listening to 821.2375MHz. Some train transmits them on 
-POCSAG address `1234002`. The formal name and structure of these messages is unknown, the contents are currently 
-identified by guessing. Current identified information in one typical long LBJ message is listed in the following table.  
+### 1. About LBJ extend message
+It does not appear on `TB/T 3504-2018` standard.
+I received this kind of messages using SDR while listening to 821.2375MHz. Some train transmits them on
+POCSAG address `1234002`. The formal name and structure of these messages is unknown, the contents are currently
+identified by guessing. Current identified information in one typical LBJ extend info message is listed in the following
+table.
 
-| Nibbles(4bit) | Encode  | Meaning                            |
-|---------------|---------|------------------------------------|
-| 0-3           | ASCII   | Type                               |
-| 4-11          | Decimal | 8 digit locomotive registry number |
-| 12-13         | Unknown | Unknown, usually 30                |
-| 14-29         | GB2312  | Route                              |
-| 30-38         | Decimal | Longitude (XXX°XX.XXXX′ E)         |
-| 39-46         | Decimal | Latitude (XX°XX.XXXX′ N)           |
-| 47-49         | Unknown | Unknown, usually 000               |
+| Nibbles(4bit) | Encode  | Meaning                                                                         |
+|---------------|---------|---------------------------------------------------------------------------------|
+| 0-3           | ASCII   | Type                                                                            |
+| 4-11          | Decimal | 8 digit locomotive registry number                                              |
+| 12-13         | Unknown | Locomotive ends, 31 for A end, 32 for B end, 30 for no A/B end or unregistered. |
+| 14-29         | GB2312  | Route                                                                           |
+| 30-38         | Decimal | Longitude (XXX°XX.XXXX′ E)                                                      |
+| 39-46         | Decimal | Latitude (XX°XX.XXXX′ N)                                                        |
+| 47-49         | Unknown | Unknown, usually 000                                                            |
 
 In total of 50 nibbles / 200 bits, transmitted in 10 POCSAG frames.
+
 ### 2. SX1276 Configuration
 - Freq = 821.2375MHz + 6 ppm (default)
 - Mode = FSK, RxDirect (DIO2)
 - Gain = 001 + LnaBoostHf (AGC off)
 - RxBW = 12.5 kHz
 
-Due to lack of TCXO on the SX1276 module used by the dev board, an automatic frequency adjustment mechanism is 
-implemented by measuring the frequency error of the carrier and preamble received using SX1276's frequency error indicator
-(FEI). It tries to lock on the signal after receiving a carrier or preamble, thus compensate for the frequency error 
-caused by crystal or the transmitter. This mechanism can be disabled via serial command `afc off`.
+Due to lack of TCXO on the SX1276 module used by the dev board, an automatic frequency adjustment ([AFC](src/AFC.md))
+mechanism is implemented by measuring the frequency error of the carrier and preamble received using SX1276's frequency
+error indicator (FEI). It tries to lock on the signal after receiving a carrier or preamble, thus compensate for the
+frequency error caused by crystal or the transmitter. This mechanism can be disabled via serial command `afc off`.
 
 ### 3. Telnet/Serial Commands
 #### Serial

@@ -435,7 +435,7 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                 if (l->direction == -1)
                     l->direction = (int8_t) p[i].func;
                 /*
-                 * The LBJ Additional info message does not appear on any standards,
+                 * The LBJ Extend Info (info2) message does not appear on any standards,
                  * decoding based purely on guess and formerly received type 1 messages.
                  * A typical type 1 message is:
                  * 204U2390093130U-(2 9U- (-(202011720927939053465000
@@ -446,7 +446,7 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                  *    I     II   III       IV            V         VI    VII
                  * I.   00-03   Two ASCII bytes for class, in this case 4U = 4B = K.
                  * II.  04-11   8 nibbles/32 bits for locomotive register number.
-                 * III. 12-13   Unknown, usually 30, maybe some sort of sync word.
+                 * III. 12-13   2 nibbles/8 bits for locomotive ends, 31 for A, 32 for B.
                  * IV.  14-29   4 GBK characters/8 bytes/16 nibbles/32 bits for route.
                  * V.   30-38   9 nibbles for longitude in format XXX°XX.XXXX′ E.
                  * VI.  39-46   8 nibbles for latitude in format XX°XX.XXXX′ N.
