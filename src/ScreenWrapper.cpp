@@ -286,7 +286,7 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->setCursor(display->getCursorX() + 1, display->getCursorY());
     display->setFont(font_12_alphanum);
     display->printf("%s", l.loco);
-    if (String(l.loco) != "<NUL>" && l.loco_type.length() && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
+    if (String(l.loco) != "<NUL>" && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
         if (l.info2_hex[13] == '1')
             display->printf("A");
         else if (l.info2_hex[13] == '2')

@@ -417,6 +417,7 @@ void Menu::acknowledge() {
                     Serial.println("[SDLOG] issued SD reopen.");
                     SD_LOG::reopenSD();
                     sd1.begin("/LOGTEST");
+                    esp_task_wdt_reset();
                     sd1.beginCSV("/CSVTEST");
                     sd1.append("[SDLOG] SD卡已重新挂载\n");
                     Serial.println("$ [SDLOG] SD reopen.");

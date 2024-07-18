@@ -33,7 +33,7 @@
 #include <RadioLib.h>
 #include "coredump.h"
 
-#include <esp_task_wdt.h>
+// #include <esp_task_wdt.h>
 // #include "ScreenWrapper.h"
 #include "Menu.h"
 // #include "aFFS.h"
@@ -506,6 +506,7 @@ void loop() {
     if (oled.ppmChanged() && runtime_timer == 0 && !pager.gotSyncState()) {
         actual_frequency = actualFreq(ppm);
         radio.setFrequency(actual_frequency);
+        freq_last = actual_frequency;
         oled.clearPPMFlag();
         Serial.printf("[D] Frequency altered to %f MHz, ppm %.2f\n", actual_frequency, getBias(actual_frequency));
     }

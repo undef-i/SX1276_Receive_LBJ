@@ -15,6 +15,7 @@
 #include "boards.hpp"
 #include "loco.h"
 #include "freertos/FreeRTOS.h"
+#include <esp_task_wdt.h>
 
 /* ------------------------------------------------ */
 #define LBJ_INFO_ADDR 1234000
