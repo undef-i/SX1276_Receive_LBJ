@@ -85,6 +85,7 @@ void initBoard() {
         u8g2->setFontMode(1); // Transparent
         u8g2->setDrawColor(1);
         u8g2->setFontDirection(0);
+        // u8g2->setContrast(255); // todo: add contrast settings.
         u8g2->enableUTF8Print();
         u8g2->firstPage();
         if (voltage < 3.10) {

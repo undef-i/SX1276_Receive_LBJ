@@ -557,7 +557,7 @@ void loop() {
     }
 
     if (millis64() - led_timer > LED_ON_TIME && led_timer != 0 && fd_state == TASK_INIT) {
-        digitalWrite(BOARD_LED, LED_OFF);
+        analogWrite(BOARD_LED, LED_OFF);
         led_timer = 0;
         changeCpuFreq(240);
     }
@@ -617,7 +617,7 @@ void loop() {
         sd1.append("[Pager] FD_TASK Timeout.\n");
         initFmtVars();
         Serial.printf("LED LOW [%llu]\n", millis64() - format_task_timer);
-        digitalWrite(BOARD_LED, LED_OFF);
+        analogWrite(BOARD_LED, LED_OFF);
         format_task_timer = 0;
         led_timer = 0;
         changeCpuFreq(240);
@@ -703,7 +703,7 @@ void loop() {
         if (state == RADIOLIB_ERR_NONE) {
             freq_last = actual_frequency;
 //            Serial.printf("success.\n");
-            digitalWrite(BOARD_LED, LED_ON);
+            analogWrite(BOARD_LED, 255);
             format_task_timer = millis64();
             led_timer = millis64();
             if (!first_rx)
@@ -740,13 +740,13 @@ void loop() {
                                esp_get_free_heap_size());
                     fd_state = TASK_CREATE_FAILED;
                     simpleFormatTask();
-                    digitalWrite(BOARD_LED, LED_OFF);
+                    analogWrite(BOARD_LED, LED_OFF);
                 }
             } else {
                 dualPrintf(true, "[Pager] Failed to create format task, errcode %d\n", x_ret);
                 sd1.append("[Pager] Failed to create format task, errcode %d\n", x_ret);
                 fd_state = TASK_CREATE_FAILED;
-                digitalWrite(BOARD_LED, LED_OFF);
+                analogWrite(BOARD_LED, LED_OFF);
             }
 
         } else if (state == RADIOLIB_ERR_MSG_CORRUPT) {
