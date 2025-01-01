@@ -76,6 +76,12 @@ private:
 
     void writeHeaderCSV();
 
+    int createIndex(File cwd, const String& index_path);
+
+    int readIndex(const File& cwd);
+
+    void updateIndex(const String& path, int counter);
+
     String log_path;
     String csv_path;
     fs::FS *filesys;
@@ -84,7 +90,7 @@ private:
     File log;
     File csv;
     File cd;
-    int log_count; // Actual file count - 1. =0 default
+    int log_count; // Actual file count - 1, default = 0.
     char filename[32]; // =""
     char filename_csv[32];
     bool sd_log; // = false

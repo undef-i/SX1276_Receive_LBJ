@@ -342,7 +342,7 @@ void showLBJ1(const struct lbj_data &l) {
     u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
     u8g2->setFont(u8g2_font_profont12_custom_tf);
     u8g2->printf("%s", l.loco);
-    if (String(l.loco) != "<NUL>" && l.loco_type.length() && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
+    if (String(l.loco) != "<NUL>" && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
         if (l.info2_hex[13] == '1')
             u8g2->printf("A");
         else if (l.info2_hex[13] == '2')

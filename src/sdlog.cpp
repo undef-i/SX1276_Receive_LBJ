@@ -68,10 +68,12 @@ void SD_LOG::getFilename(const char *path) {
         return;
     }
     char last[32];
-    int counter = 0;
-    while (cwd.openNextFile()) {
-        counter++;
-    }
+    // read index
+    int counter = readIndex(cwd);
+    // int counter = 0;
+    // while (cwd.openNextFile()) {
+    //     counter++;
+    // }
     sprintf(last, "LOG_%04d.txt", counter - 1);
     String last_path = String(String(path) + "/" + String(last));
     if (!filesys->exists(last_path)) {
@@ -87,6 +89,8 @@ void SD_LOG::getFilename(const char *path) {
         sprintf(filename, "LOG_%04d.txt", counter);
         is_newfile = true;
         log_count = counter;
+        // update index
+        updateIndex(String(path),counter + 1);
     }
     Serial.printf("[SDLOG] %d log files, using %s \n", counter, filename);
     sd_log = true;
@@ -110,10 +114,11 @@ void SD_LOG::getFilenameCSV(const char *path) {
         return;
     }
     char last[32];
-    int counter = 0;
-    while (cwd.openNextFile()) {
-        counter++;
-    }
+    int counter = readIndex(cwd);
+    // int counter = 0;
+    // while (cwd.openNextFile()) {
+    //     counter++;
+    // }
     sprintf(last, "CSV_%04d.csv", counter - 1);
     String last_path = String(String(path) + "/" + String(last));
     if (!filesys->exists(last_path)) {
@@ -127,6 +132,7 @@ void SD_LOG::getFilenameCSV(const char *path) {
     } else {
         sprintf(filename_csv, "CSV_%04d.csv", counter);
         is_newfile_csv = true;
+        updateIndex(String(path),counter + 1);
     }
     Serial.printf("[SDLOG] %d csv files, using %s \n", counter, filename_csv);
     sd_csv = true;
@@ -566,4 +572,56 @@ void SD_LOG::reopenSD() {
     SD.begin(SDCARD_CS, SDSPI);
     // sd_csv = true;
     // sd_log = true;
+}
+
+int SD_LOG::createIndex(File cwd, const String& index_path) {
+    File index = filesys->open(index_path,FILE_WRITE);
+    // Write Header
+    index.println("-------------------------------------------------");
+    index.println("ESP32 DEV MODULE INDEX FILE");
+    index.println("PROGRAM GENERATED, DO NOT EDIT.");
+    index.println("-------------------------------------------------");
+    index.printf("DIRECTORY: %s\n",cwd.path());
+    index.close();
+    // Count files
+    int counter = -1;
+    while (cwd.openNextFile()) {
+        counter++;
+    }
+    // Write count
+    index = filesys->open(index_path,FILE_APPEND);
+    index.printf("FILE COUNTER: %d\n",counter);
+    index.close();
+    return counter;
+}
+
+int SD_LOG::readIndex(const File& cwd) {
+    String index_path = String(cwd.path()) + "/INDEX";
+    int counter = 0;
+    if (!filesys->exists(index_path)) {
+        counter = createIndex(cwd, index_path);
+    } else {
+        File index = filesys->open(index_path,FILE_READ, false);
+        while (index.available()) {
+            String str = index.readStringUntil('\n');
+            if (str.substring(0, 13) == "FILE COUNTER:") {
+                counter = std::stoi(str.substring(14).c_str());
+                break;
+            }
+        }
+    }
+    // Serial.printf("[D] Index file counter: %d\n",counter);
+    return counter;
+}
+
+void SD_LOG::updateIndex(const String &path, int counter) {
+    String index_path = path + "/INDEX";
+    File index = filesys->open(index_path,FILE_WRITE);
+    index.println("-------------------------------------------------");
+    index.println("ESP32 DEV MODULE INDEX FILE");
+    index.println("PROGRAM GENERATED, DO NOT EDIT.");
+    index.println("-------------------------------------------------");
+    index.printf("DIRECTORY: %s\n",path.c_str());
+    index.printf("FILE COUNTER: %d\n",counter);
+    index.close();
 }
