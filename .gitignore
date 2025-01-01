@@ -1,6 +1,7 @@
 .pio
 logs
 .vscode
+.idea
 /COREDUMP*.bin
 /coredump.txt
 /readcd_bin.bat
