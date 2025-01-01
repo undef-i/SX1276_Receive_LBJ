@@ -1,6 +1,7 @@
 .pio
 logs
 .vscode
+.idea
 /COREDUMP*.bin
 readcd_txt.bat
 readcd_bin.ps1
