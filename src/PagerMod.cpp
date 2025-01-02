@@ -61,7 +61,7 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
         uint8_t data[len + 1];
 
         state = readDataMA(data, &length, &p[i].addr, &p[i].func, &framePos, &addr_next, &p[i].is_empty,
-                           &complete, &p[i].errs_total, &p[i].errs_uncorrected);
+                           &complete, &p[i].errs_total, &p[i].errs_uncorrected, &p[i].epi);
 
         if (i && state == RADIOLIB_ERR_ADDRESS_NOT_FOUND) {
 //                Serial.println("ADDR NO MATCH");
@@ -144,7 +144,7 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
 
 int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint32_t *func, uint8_t *framePos,
                                 uint32_t *addr_next, bool *is_empty, bool *complete, uint16_t *errs_total,
-                                uint16_t *errs_uncorrected) {
+                                uint16_t *errs_uncorrected, String *epi) {
     // find the correct address
     bool match = false;
 //    uint8_t framePos = 0;
@@ -152,7 +152,7 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
     uint16_t errors = 0;
     bool parity_check = true;
     uint16_t err_prev;
-    uint32_t cw_prev;
+    // uint32_t cw_prev;
     CBCH3121 PocsagFec;
     bool is_sync = true;
 
@@ -199,10 +199,11 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
 //         }
 
         err_prev = errors;
-        cw_prev = cw;
+        // cw_prev = cw;
         if (!PocsagFec.decode(cw, errors, parity_check)) {
 //            Serial.println("BCH Failed.");
             *errs_uncorrected += errors - err_prev;
+            *epi += "Xu";
             if (!is_sync) {
                 *errs_total = errors;
                 return (RADIOLIB_ERR_MSG_CORRUPT);
@@ -225,6 +226,7 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
                 // }
                 // parity_check = true;
                 *errs_uncorrected += errors - err_prev;
+                *epi += "Pu";
                 if (!is_sync) {
                     *errs_total = errors;
                     return (RADIOLIB_ERR_MSG_CORRUPT);
@@ -235,11 +237,13 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
             }
             // Serial.printf("BCH SUCCESS, ERR %d\n", errors);
             is_sync = true;
+            *epi += String(errors - err_prev);
         }
 
         // check if it's the idle code word
         if (cw == RADIOLIB_PAGER_IDLE_CODE_WORD) {
 //            Serial.println("IDLE FOUND.");
+            *epi += "i";
             continue;
         }
 
@@ -247,6 +251,7 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
         if (cw == RADIOLIB_PAGER_FRAME_SYNC_CODE_WORD) {
             *framePos = 0;
 //            Serial.println("SYNC FOUND.");
+            *epi += "s";
             continue;
         }
 
@@ -254,12 +259,14 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
         // not an idle code word, check if it's an address word
         if (cw & (RADIOLIB_PAGER_MESSAGE_CODE_WORD << (RADIOLIB_PAGER_CODE_WORD_LEN - 1))) {
             // this is pretty weird, it seems to be a message code word without address
+            *epi += "m";
             continue;
         }
 
         // should be an address code word, extract the address
         uint32_t addr_found =
                 ((cw & RADIOLIB_PAGER_ADDRESS_BITS_MASK) >> (RADIOLIB_PAGER_ADDRESS_POS - 3)) | (*framePos / 2);
+        *epi += "a";
         if ((addr_found & filterMask) == (filterAddr & filterMask)) {
             // we have a match!
             *is_empty = false;
@@ -319,7 +326,7 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
 //         }
 
         err_prev = errors;
-        cw_prev = cw;
+        // cw_prev = cw;
         if (PocsagFec.decode(cw, errors, parity_check)) {
             if (!parity_check) {
                 // cw = cw_prev;
@@ -344,6 +351,7 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
                     data[decodedBytes++] = 'X';
                 }
                 *errs_uncorrected += errors - err_prev;
+                *epi += "Pu";
                 if (!is_sync) {
                     *errs_total = errors;
                     if (deco != 0)
@@ -354,10 +362,12 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
                 parity_check = true;
                 continue;
             }
+            *epi += String(errors - err_prev);
             is_sync = true;
             // Serial.printf("SYNC BCH CHECK PERFORMED, ERR %d, ERR_TTL %d \n", errors - err_prev, errors);
         } else {
             *errs_uncorrected += errors - err_prev;
+            *epi += "Xu";
             for (size_t i = 0; i < 5; i++) {
                 data[decodedBytes++] = 'X';
             }
@@ -376,17 +386,20 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
         if (cw == RADIOLIB_PAGER_IDLE_CODE_WORD) {
 //            Serial.println("IDLE FOUND.");
             *complete = true;
+            *epi += "i";
             break;
         }
 
         // skip the sync words
         if (cw == RADIOLIB_PAGER_FRAME_SYNC_CODE_WORD) {
 //            Serial.println("SYNC FOUND.");
+            *epi += "s";
             continue;
         }
 
         if (!(cw & (RADIOLIB_PAGER_MESSAGE_CODE_WORD << (RADIOLIB_PAGER_CODE_WORD_LEN - 1)))) {
             *addr_next = cw; // returned codeword actually for function determination.
+            *epi += "a";
             break;
         }
 
@@ -407,6 +420,7 @@ int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint
         uint8_t bitPos = RADIOLIB_PAGER_CODE_WORD_LEN - 1 - symbolLength;
 //        Serial.println("GOT DATA.");
         Serial.printf("RAW CW %X \n", cw);
+        *epi += "m";
         if (overflow) {
             overflow = false;
 

@@ -75,6 +75,7 @@ public:
         uint32_t func = 5;
         uint16_t errs_total = 0;
         uint16_t errs_uncorrected = 0;
+        String epi = {};
         bool is_empty = true;
     };
 
@@ -199,7 +200,7 @@ public:
 
     int16_t readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint32_t *func, uint8_t *framePos,
                        uint32_t *addr_next, bool *is_empty, bool *complete, uint16_t *errs_total,
-                       uint16_t *errs_uncorrected);
+                       uint16_t *errs_uncorrected, String *epi);
 
     int16_t readDataS(struct PagerClient::pocsag_data *p);
 

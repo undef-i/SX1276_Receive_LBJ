@@ -1122,13 +1122,45 @@ void formatDataTask(void *pVoid) {
     // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
     sd1.append(2, "格式化任务已创建\n");
     bool empty = true;
-    for (auto &i: db->pocsagData) {
-        if (i.is_empty)
+    for (int i = 0; i < POCDAT_SIZE; i++) {
+        if (db->pocsagData[i].is_empty)
             continue;
         empty = false;
-        Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        db->str = db->str + "  " + i.str;
+        for (int j = 0; j < db->pocsagData[i].epi.length(); j+=2) {
+            String epi_cw = db->pocsagData[i].epi.substring(j,j+2);
+            if (String(epi_cw[epi_cw.length()-1]) == "a") {
+                if (j > 2) {
+                    if (!db->pocsagData[i+1].is_empty) {
+                        String epi_next = db->pocsagData[i].epi.substring(j);
+                        db->pocsagData[i + 1].epi = epi_next + db->pocsagData[i + 1].epi;
+                        db->pocsagData[i].epi = db->pocsagData[i].epi.substring(0, j);
+                        break;
+                    } else if (i == 0 && j+2 < db->pocsagData[i].epi.length()) {
+                        db->pocsagData[i].epi = db->pocsagData[i].epi.substring(j);
+                        break;
+                    }
+                }
+            }
+        }
+        Serial.printf("[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func, db->pocsagData[i].str.c_str());
+        // String epi_s;
+        // // [D-pDATA] 1234000/1: 50015  19 -----
+        // // [D-pDATA] EPIs: 1    0    0    0
+        // // [D-pDATA] EPI: 1a0m0m0m
+        // // [D-pDATA] 1234002/1: 20201670000630U)*9UU*6 (-(202011618444639511203000
+        // // [D-pDATA] EPI: 0a0m0m0m0m0m0m0m0m0m0m0i
+        // for (int j = 0; j < db->pocsagData[i].epi.length(); j+=2) {
+        //     epi_s += db->pocsagData[i].epi[j];
+        //     if (String(db->pocsagData[i].epi[j+1]) == "i") {
+        //         epi_s += "I   ";
+        //         break;
+        //     }
+        //     epi_s += "    ";
+        // }
+        // Serial.printf("[D-pDATA] EPIs: %s\n", epi_s.c_str());
+        Serial.printf("[D-pDATA] EPI: %s\n", db->pocsagData[i].epi.c_str());
+        sd1.append(2, "[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func, db->pocsagData[i].str.c_str());
+        db->str = db->str + "  " + db->pocsagData[i].str;
     }
     if (empty) {
         fd_state = TASK_DONE;
