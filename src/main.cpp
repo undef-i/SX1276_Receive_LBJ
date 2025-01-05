@@ -1182,6 +1182,7 @@ void formatDataTask(void *pVoid) {
     sd1.append(2, "LBJ读取完成，用时[%llu]\n", millis64() - runtime_timer);
     Serial.printf("Read complete.[%llu]", millis64() - runtime_timer);
     // Serial.printf("[FD-Task] Stack High Mark rLBJ %u\n", uxTaskGetStackHighWaterMark(nullptr));
+    Serial.printf("[D-LEPI][%s]", db->lbjData.epi.c_str());
 
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
     sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);

@@ -234,6 +234,18 @@ void Menu::handleKey(bool up) {
             alterDigitIndex(selected_item,up);
             break;
         case MENU_OLED:
+            if (up)
+                selected_item--;
+            else
+                selected_item++;
+            if (selected_item < 0) {
+                selected_item = 1;
+            }
+            if (selected_item > 1) {
+                selected_item = 0;
+            }
+            showOLED();
+            highlightItem(selected_item);
             // more coming...
             break;
     }
@@ -483,6 +495,11 @@ void Menu::acknowledge() {
                     update = true;
                     is_menu = false;
                     // enabled = false;
+                    break;
+                case 1:
+                    draw_epi = !draw_epi;
+                    showOLED();
+                    highlightItem(selected_item);
                     break;
             }
             break;
@@ -975,6 +992,12 @@ void Menu::showOLED() {
 
     items[0] = "关闭显示";
     display->drawUTF8(0, 26, items[0].c_str());
+    items[1] = "显示纠错位置 ";
+    if (draw_epi)
+        items[1] += "[已启用]";
+    else
+        items[1] += "[已禁用]";
+    display->drawUTF8(0, 38, items[1].c_str());
 }
 
 

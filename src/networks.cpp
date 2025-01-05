@@ -2,6 +2,7 @@
 // Created by FLN1021 on 2023/9/2.
 //
 
+#include <cstdint>
 #include "networks.hpp"
 
 /* ------------------------------------------------ */
@@ -138,6 +139,7 @@ char *fmtms(uint64_t ms) {
 }
 
 #ifdef HAS_RTC
+
 tm rtcLibtoC(const DateTime &datetime) {
     tm time{};
     time.tm_year = datetime.year() - 1900;
@@ -156,6 +158,7 @@ DateTime rtcLibtoC(const tm &ctime) {
     DateTime now(ctime.tm_year + 1900, ctime.tm_mon + 1, ctime.tm_mday, ctime.tm_hour, ctime.tm_min, ctime.tm_sec);
     return now;
 }
+
 #endif
 
 /* ------------------------------------------------ */
@@ -257,20 +260,19 @@ void onTelnetInput(String str) {
                 freq_correction = false;
                 telnet.println("> Frequency Correction Disabled");
                 Serial.println("[Telnet] > Frequency Correction Disabled");
-            }
-            else if (args[1] == "on") {
+            } else if (args[1] == "on") {
                 freq_correction = true;
                 telnet.println("> Frequency Correction Enabled");
                 Serial.println("[Telnet] > Frequency Correction Enabled");
             }
         }
         if (args[0] == "ppm") {
-            if (args[1].length() != 0 ){
+            if (args[1].length() != 0) {
                 bool valid = true;
                 bool point = false;
-                for (auto c:args[1]){
+                for (auto c: args[1]) {
                     if (!isDigit(c)) {
-                        if (c == '.'&& !point)
+                        if (c == '.' && !point)
                             point = true;
                         else
                             valid = false;
@@ -410,6 +412,11 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                         }
                         l->position[v] = 0;
                     }
+                    for (int j = 2; j < p[i].epi.length(); j += 2) {
+                        if (j > 6 || p[i].epi[j + 1] != 'm' && p[i].epi[j + 1] != 'u')
+                            break;
+                        l->epi += p[i].epi[j];
+                    }
                     /* there are times we got this kind of message:
                      * XXXXX --- -----XXXXX20201100600430U-(2 9U- (-(2020----------XXXXX--000
                      * we have to process them as type 1.
@@ -430,8 +437,24 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                         buffer = p[i].str.substring(20);
                     else
                         break;
-                } else
+                    for (int j = 10; j < p[i].epi.length(); j += 2) {
+                        if (j > 30 || p[i].epi[j + 1] != 'm' && p[i].epi[j + 1] != 'u')
+                            break;
+                        l->epi += p[i].epi[j];
+                    }
+                } else {
+                    while (l->epi.length() < 3) {
+                        l->epi += 'N';
+                    }
+                    if (l->epi.length() > 3)
+                        l->epi = l->epi.substring(0,3);
+                    for (int j = 2; j < p[i].epi.length(); j += 2) {
+                        if (j > 22 || p[i].epi[j + 1] != 'm' && p[i].epi[j + 1] != 'u')
+                            break;
+                        l->epi += p[i].epi[j];
+                    }
                     buffer = p[i].str;
+                }
                 if (l->direction == -1)
                     l->direction = (int8_t) p[i].func;
                 /*
@@ -523,7 +546,7 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                     for (size_t v = 14; v < 17; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
-                        if ((uint8_t )ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
+                        if ((uint8_t) ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
                             l->route[c] = ch;
                     }
                 }
@@ -532,7 +555,7 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                     for (size_t v = 18; v < 21; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
-                        if ((uint8_t )ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
+                        if ((uint8_t) ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
                             l->route[c] = ch;
                     }
                 }
@@ -541,11 +564,11 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                     for (size_t v = 22; v < 29; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
-                        if ((uint8_t )ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
+                        if ((uint8_t) ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
                             l->route[c] = ch;
                     }
                 }
-                gbk2utf8(l->route, l->route_utf8, 17);
+                gbk2utf8(l->route, l->route_utf8, 9);
                 break;
             }
             case LBJ_SYNC_ADDR: {
@@ -557,6 +580,9 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                         if (c == 2)
                             l->time[++v] = ':';
                     }
+                }
+                if (p[i].epi.length() >= 4 && p[i].epi[3] == 'm') {
+                    l->epi = p[i].epi.substring(2, 3);
                 }
                 break;
             }
@@ -689,11 +715,20 @@ void gbk2utf8(const char *gbk1, char *utf8s, size_t gbk_len) {
         uint8_t ut8[4];
         int r = enc_unicode_to_utf8_one(unic[c], ut8);
         if (i + 4 < gbk_len * 2) {
-            if (r == 1) utf8[i] = ut8[0];
-            else if (r == 2) utf8[i] = ut8[0], utf8[++i] = ut8[1];
-            else if (r == 3) utf8[i] = ut8[0], utf8[++i] = ut8[1], utf8[++i] = ut8[2];
-            else if (r == 4) utf8[i] = ut8[0], utf8[++i] = ut8[1], utf8[++i] = ut8[2], utf8[++i] = ut8[3];
+            if (r == 1)
+                utf8[i] = ut8[0];
+            else if (r == 2)
+                utf8[i] = ut8[0], utf8[++i] = ut8[1];
+            else if (r == 3)
+                utf8[i] = ut8[0], utf8[++i] = ut8[1], utf8[++i] = ut8[2];
+            else if (r == 4)
+                utf8[i] = ut8[0], utf8[++i] = ut8[1], utf8[++i] = ut8[2], utf8[++i] = ut8[3];
         }
+        if (utf8[i] == 0)
+            break;
+        // if (c < u8char_len_size) {
+        //     u8char_len[c] = r;
+        // }
     }
     for (size_t v = 0; v < gbk_len * 2; v++) {
         utf8s[v] = (char) utf8[v];
@@ -706,21 +741,21 @@ String formatEpi(String &epi) {
     char buffer[16];
     String epi_str;
     // sprintf(buffer,"[EPI][EPIs:");
-    for (int j = 0; j < epi.length(); j+=2) {
-        if (j+2 == epi.length() && String(epi[j+1]) != "u" && String(epi[j+1]) != "m") {
+    for (int j = 0; j < epi.length(); j += 2) {
+        if (j + 2 == epi.length() && String(epi[j + 1]) != "u" && String(epi[j + 1]) != "m") {
             if (String(epi[j]) == "0")
-                sprintf(buffer," %c   ", toUpperCase(epi[j+1]));
+                sprintf(buffer, " %c   ", toUpperCase(epi[j + 1]));
             else
-                sprintf(buffer,"%c%c   ", epi[j], toUpperCase(epi[j+1]));
+                sprintf(buffer, "%c%c   ", epi[j], toUpperCase(epi[j + 1]));
             epi_str += buffer;
             continue;
         }
         if (String(epi[j]) == "0") {
-            sprintf(buffer,"     ");
+            sprintf(buffer, "     ");
             epi_str += buffer;
             continue;
         }
-        sprintf(buffer,"%c    ",epi[j]);
+        sprintf(buffer, "%c    ", epi[j]);
         epi_str += buffer;
     }
     // sprintf(buffer,"]\n");

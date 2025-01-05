@@ -2,6 +2,7 @@
 // Created by FLN1021 on 2024/2/10.
 //
 
+#include <cstdint>
 #include "ScreenWrapper.h"
 
 bool ScreenWrapper::setDisplay(DISPLAY_MODEL *display_ptr) {
@@ -154,6 +155,9 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     display->setFont(font_15_alphanum_bold);
     display->setCursor(50, display->getCursorY());
     display->printf("%s", l.train);
+    // draw epi
+    // drawEpi(l.type, 0, l.epi);
+    directDrawEpi(getErrorCount(0,l.epi),50,l.train,1,1,1);
     display->setFont(u8g2_font_wqy15_t_custom);
     display->setCursor(display->getCursorX() + 6, display->getCursorY());
     if (l.direction == FUNCTION_UP) {
@@ -175,6 +179,8 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     u8g2->setCursor(50, u8g2->getCursorY());
     display->setFont(font_15_alphanum_bold);
     display->printf(" %s ", l.speed);
+    // drawEpi(l.type, 1, l.epi);
+    directDrawEpi(getErrorCount(1,l.epi),50,l.speed,1,1,1);
     u8g2->setCursor(u8g2->getCursorX() + 7, u8g2->getCursorY());
     display->setFont(font_15_alphanum);
     display->printf("KM/H");
@@ -184,7 +190,10 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     display->printf("公里标");
     u8g2->setCursor(50, u8g2->getCursorY());
     display->setFont(font_15_alphanum_bold);
-    display->printf("%s ", l.position);
+    display->printf("%s", l.position);
+    // drawEpi(l.type, 2, l.epi);
+    directDrawEpi(getErrorCount(2,l.epi),50,l.position,1,1,1);
+    display->printf(" ");
     display->setCursor(display->getCursorX() + 4, display->getCursorY());
     display->setFont(font_15_alphanum);
     display->printf("KM");
@@ -240,7 +249,14 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         buffer[c] = l.train[i];
         ++c;
     }
-    display->printf("%s%s", l.lbj_class, buffer);
+    uint16_t cx_prev = display->getCursorX();
+    display->printf("%s", l.lbj_class);
+    directDrawEpi(getErrorCount(3, l.epi), cx_prev, l.lbj_class, 0, 1);
+    // drawEpi(l.type, 3, l.epi, cx_prev);
+    cx_prev = display->getCursorX();
+    display->printf("%s", buffer);
+    directDrawEpi(getErrorCount(0, l.epi), cx_prev, buffer, 0, 1);
+    // drawEpi(l.type, 0, l.epi, cx_prev);
     // display->printf("%s%s", l.lbj_class, l.train);
     display->setFont(FONT_12_GB2312);
     // sprintf(buffer, "速:%sKM/H", l.speed);
@@ -248,7 +264,10 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->printf("速:");
     display->setCursor(display->getCursorX() + 2, display->getCursorY());
     display->setFont(font_12_alphanum);
+    cx_prev = display->getCursorX();
     display->printf("%s", l.speed);
+    // drawEpi(l.type, 1, l.epi, cx_prev);
+    directDrawEpi(getErrorCount(1, l.epi), cx_prev, l.speed,0,1);
     display->setCursor(display->getCursorX(), display->getCursorY());
     display->printf("KM/H");
     display->setFont(FONT_12_GB2312);
@@ -258,7 +277,159 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->setCursor(0, 31);
     display->printf("线:");
     display->setCursor(display->getCursorX() + 2, display->getCursorY());
-    display->printf("%s", l.route_utf8);
+    // cx_prev = display->getCursorX();
+    if (String(l.route_utf8) == "********")
+        display->printf("%s", l.route_utf8);
+    else {
+        String route_str = String(l.route_utf8);
+        bool short_ch = false;
+        for (int i = 0, j = 5; i < route_str.length();) {
+            int8_t char_len = getU8CharLen(route_str[i]);
+            String route_char = route_str.substring(i, i + char_len);
+            if (!short_ch)
+                cx_prev = display->getCursorX();
+            display->print(route_char);
+            // Serial.println(route_char);
+            if (char_len < 2 && !short_ch) {
+                short_ch = true;
+                i += char_len;
+                continue;
+            }
+            if (short_ch) {
+                short_ch = false;
+                route_char = route_str.substring(i - 1, i) + route_char;
+            }
+            if (j < 8) {
+                if (getErrorCount(j, l.epi) != -1 || getErrorCount(j + 1, l.epi) != -1) {
+                    int8_t error = max(getErrorCount(j, l.epi), getErrorCount(j + 1, l.epi));
+                    directDrawEpi(error, cx_prev, route_char, 1);
+                }
+            } else {
+                if (getErrorCount(j, l.epi) != -1) {
+                    int8_t error = getErrorCount(j, l.epi);
+                    directDrawEpi(error, cx_prev, route_char, 1);
+                }
+            }
+            j++;
+            i += char_len;
+        }
+        // String route_char = String(l.route_utf8).substring(0,3);
+        // cx_prev = display->getCursorX();
+        // display->print(route_char);
+        // Serial.println(route_char);
+        // if (getErrorCount(5,l.epi)!=-1 || getErrorCount(6,l.epi)!=-1) {
+        //     int8_t error = max(getErrorCount(5,l.epi), getErrorCount(6,l.epi));
+        //     if (error == 1) {
+        //         display->drawHLine(cx_prev, display->getCursorY()+1, display->getCursorX()-cx_prev);
+        //     } else if (error == 2) {
+        //         uint16_t cy_prev = display->getCursorY();
+        //         display->drawBox(cx_prev, display->getCursorY()-display->getMaxCharHeight()+3,display->getCursorX()-cx_prev,display->getMaxCharHeight()-1);
+        //         display->setDrawColor(0);
+        //         display->setCursor(cx_prev,cy_prev);
+        //         display->print(route_char);
+        //         display->setDrawColor(1);
+        //     }
+        // }
+        // // drawEpi(l.type, 5, l.epi, cx_prev);
+        // // uint16_t cx_prev2 = display->getCursorX();
+        // cx_prev = display->getCursorX();
+        // route_char = String(l.route_utf8).substring(3,6);
+        // display->print(route_char);
+        // Serial.println(route_char);
+        // if (getErrorCount(6,l.epi)!=-1 || getErrorCount(7,l.epi)!=-1) {
+        //     int8_t error = max(getErrorCount(6,l.epi), getErrorCount(7,l.epi));
+        //     if (error == 1) {
+        //         display->drawHLine(cx_prev, display->getCursorY()+1, display->getCursorX()-cx_prev);
+        //     } else if (error == 2) {
+        //         uint16_t cy_prev = display->getCursorY();
+        //         display->drawBox(cx_prev, display->getCursorY()-display->getMaxCharHeight()+3,display->getCursorX()-cx_prev,display->getMaxCharHeight()-1);
+        //         display->setCursor(cx_prev,cy_prev);
+        //         display->setDrawColor(0);
+        //         display->print(route_char);
+        //         display->setDrawColor(1);
+        //     }
+        // }
+        // // drawEpi(l.type, 6, l.epi, cx_prev);
+        // cx_prev = display->getCursorX();
+        // display->printf("%s", String(l.route_utf8).substring(6, 9).c_str());
+        // Serial.println(route_char);
+        // if (getErrorCount(7,l.epi)!=-1 || getErrorCount(8,l.epi)!=-1) {
+        //     int8_t error = max(getErrorCount(7,l.epi), getErrorCount(8,l.epi));
+        //     if (error == 1) {
+        //         display->drawHLine(cx_prev, display->getCursorY()+1, display->getCursorX()-cx_prev);
+        //     } else if (error == 2) {
+        //         uint16_t cy_prev = display->getCursorY();
+        //         display->drawBox(cx_prev, display->getCursorY()-display->getMaxCharHeight()+3,display->getCursorX()-cx_prev,display->getMaxCharHeight()-1);
+        //         display->setDrawColor(0);
+        //         display->setCursor(cx_prev,cy_prev);
+        //         display->print(route_char);
+        //         // Serial.println(route_char);
+        //         display->setDrawColor(1);
+        //     }
+        // }
+        // // drawEpi(l.type, 7, l.epi, cx_prev2);
+        // cx_prev = display->getCursorX();
+        // display->printf("%s", String(l.route_utf8).substring(9).c_str());
+        // Serial.println(route_char);
+        // if (getErrorCount(8,l.epi)!=-1) {
+        //     if (getErrorCount(8,l.epi) == 1) {
+        //         display->drawHLine(cx_prev, display->getCursorY()+1, display->getCursorX()-cx_prev);
+        //     } else if (getErrorCount(8,l.epi) == 2) {
+        //         uint16_t cy_prev = display->getCursorY();
+        //         display->drawBox(cx_prev, display->getCursorY()-display->getMaxCharHeight()+3,display->getCursorX()-cx_prev,display->getMaxCharHeight()-1);
+        //         display->setDrawColor(0);
+        //         display->setCursor(cx_prev,cy_prev);
+        //         display->print(route_char);
+        //         // Serial.println(route_char);
+        //         display->setDrawColor(1);
+        //     }
+        // }
+        // Serial.println(l.route_utf8);
+        // drawEpi(l.type, 8, l.epi, cx_prev);
+        // 谢谢你，变长的UTF8，我终于绷不住了...
+        // 这段非常难绷，等有机会给他整理一下吧...
+        // cx_prev = display->getCursorX();
+        // int8_t w = display->getMaxCharWidth();
+        // display->printf("%s", l.route_utf8);
+        // uint16_t cx = display->getCursorX();
+        // uint16_t cy = display->getCursorY();
+        // if (getErrorCount(5,l.epi)!=-1 || getErrorCount(6,l.epi)!=-1) {
+        //     int8_t error = max(getErrorCount(5,l.epi), getErrorCount(6,l.epi));
+        //         if (error == 1) {
+        //             display->drawHLine(cx_prev,display->getCursorY()+1,w);
+        //         } else if (error == 2) {
+        //             display->drawFrame(cx_prev, display->getCursorY()-display->getMaxCharHeight()+2,w,display->getMaxCharHeight());
+        //         }
+        // }
+        // cx_prev += w - 1;
+        // if (getErrorCount(6,l.epi)!=-1 || getErrorCount(7,l.epi)!=-1) {
+        //     int8_t error = max(getErrorCount(6,l.epi), getErrorCount(7,l.epi));
+        //     if (error == 1) {
+        //         display->drawHLine(cx_prev,display->getCursorY()+1,w);
+        //     } else if (error == 2) {
+        //         display->drawFrame(cx_prev, display->getCursorY()-display->getMaxCharHeight()+2,w,display->getMaxCharHeight());
+        //     }
+        // }
+        // cx_prev += w - 1;
+        // if (getErrorCount(7,l.epi)!=-1 || getErrorCount(8,l.epi)!=-1) {
+        //     int8_t error = max(getErrorCount(7,l.epi), getErrorCount(8,l.epi));
+        //     if (error == 1) {
+        //         display->drawHLine(cx_prev,display->getCursorY()+1,w);
+        //     } else if (error == 2) {
+        //         display->drawFrame(cx_prev, display->getCursorY()-display->getMaxCharHeight()+2,w,display->getMaxCharHeight());
+        //     }
+        // }
+        // cx_prev += w - 1;
+        // if (getErrorCount(8,l.epi)!=-1) {
+        //     int8_t error = getErrorCount(8,l.epi);
+        //     if (error == 1) {
+        //         display->drawHLine(cx_prev,display->getCursorY()+1,w);
+        //     } else if (error == 2) {
+        //         display->drawFrame(cx_prev, display->getCursorY()-display->getMaxCharHeight()+2,w,display->getMaxCharHeight());
+        //     }
+        // }
+        // display->setCursor(cx,cy);
+    }
     // display->drawUTF8(0, 31, buffer);
     display->drawBox(67, 21, 13, 12);
     display->setDrawColor(0);
@@ -275,7 +446,10 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     // display->drawUTF8(86, 31, buffer);
     display->setCursor(84, 31);
     display->setFont(font_12_alphanum);
+    cx_prev = display->getCursorX();
     display->printf("%s", l.position);
+    // drawEpi(l.type, 2, l.epi, cx_prev);
+    directDrawEpi(getErrorCount(2, l.epi), cx_prev, l.position,0,1);
     display->setCursor(display->getCursorX(), display->getCursorY());
     display->printf("K");
     display->setFont(FONT_12_GB2312);
@@ -285,12 +459,32 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->printf("号:");
     display->setCursor(display->getCursorX() + 1, display->getCursorY());
     display->setFont(font_12_alphanum);
-    display->printf("%s", l.loco);
-    if (String(l.loco) != "<NUL>" && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
-        if (l.info2_hex[13] == '1')
-            display->printf("A");
-        else if (l.info2_hex[13] == '2')
-            display->printf("B");
+    if (String(l.loco) == "<NUL>") {
+        display->printf("%s", l.loco);
+    } else {
+        cx_prev = display->getCursorX();
+        display->printf("%c", l.loco[0]);
+        // drawEpi(l.type, 3, l.epi, cx_prev);
+        directDrawEpi(getErrorCount(3, l.epi), cx_prev, String(l.loco[0]), 0, 1);
+        cx_prev = display->getCursorX();
+        display->printf("%s", String(l.loco).substring(1, 6).c_str());
+        // drawEpi(l.type, 4, l.epi, cx_prev);
+        directDrawEpi(getErrorCount(4, l.epi), cx_prev, String(l.loco).substring(1, 6), 0, 1);
+        cx_prev = display->getCursorX();
+        if (l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
+            if (l.info2_hex[13] == '1')
+                sprintf(buffer, "%sA", String(l.loco).substring(6).c_str());
+            else if (l.info2_hex[13] == '2')
+                sprintf(buffer, "%sB", String(l.loco).substring(6).c_str());
+            else
+                sprintf(buffer, "%s", String(l.loco).substring(6).c_str());
+        } else {
+            sprintf(buffer, "%s", String(l.loco).substring(6).c_str());
+        }
+        display->printf("%s", buffer);
+        // drawEpi(l.type, 5, l.epi, cx_prev);
+        directDrawEpi(getErrorCount(5, l.epi), cx_prev, buffer, 0, 1);
+
     }
     display->setFont(FONT_12_GB2312);
     // display->drawUTF8(0, 43, buffer);
@@ -298,23 +492,47 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         display->drawUTF8(72, 43, l.loco_type.c_str());
     // line 4
     String pos;
+    display->setCursor(0,54);
+    display->setFont(font_12_alphanum);
     if (l.pos_lat_deg[1] && l.pos_lat_min[1]) {
-        sprintf(buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
-        pos += String(buffer);
+        sprintf(buffer, "%c", l.pos_lat_deg[0]);
+        cx_prev = display->getCursorX();
+        display->print(buffer);
+        directDrawEpi(getErrorCount(10,l.epi),cx_prev,buffer,0,1);
+        sprintf(buffer, "%c°%s", l.pos_lat_deg[1],String(l.pos_lat_min).substring(0,4).c_str());
+        cx_prev = display->getCursorX();
+        display->print(buffer);
+        directDrawEpi(getErrorCount(11,l.epi),cx_prev,buffer,0,1);
+        sprintf(buffer, "%s'", String(l.pos_lat_min).substring(4).c_str());
+        cx_prev = display->getCursorX();
+        display->print(buffer);
+        directDrawEpi(getErrorCount(12,l.epi),cx_prev,buffer,0,1);
+        // sprintf(buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
+        // pos += String(buffer);
     } else {
         sprintf(buffer, "%s ", l.pos_lat);
-        pos += String(buffer);
+        display->print(buffer);
+        // pos += String(buffer);
     }
     if (l.pos_lon_deg[1] && l.pos_lon_min[1]) {
-        sprintf(buffer, "%s°%s'", l.pos_lon_deg, l.pos_lon_min);
-        pos += String(buffer);
+        sprintf(buffer, "%s°%s", l.pos_lon_deg, String(l.pos_lon_min).substring(0,3).c_str());
+        cx_prev = display->getCursorX();
+        display->print(buffer);
+        directDrawEpi(getErrorCount(9,l.epi),cx_prev,buffer,0,1);
+        sprintf(buffer, "%s'", String(l.pos_lon_min).substring(3).c_str());
+        cx_prev = display->getCursorX();
+        display->print(buffer);
+        directDrawEpi(getErrorCount(10,l.epi),cx_prev,buffer,0,1);
+        // sprintf(buffer, "%s°%s'", l.pos_lon_deg, l.pos_lon_min);
+        // pos += String(buffer);
     } else {
         sprintf(buffer, "%s ", l.pos_lon);
-        pos += String(buffer);
+        display->print(buffer);
+        // pos += String(buffer);
     }
 //    sprintf(buffer,"%s°%s'%s°%s'",l.pos_lat_deg,l.pos_lat_min,l.pos_lon_deg,l.pos_lon_min);
-    display->setFont(font_12_alphanum);
-    display->drawUTF8(0, 54, pos.c_str());
+//     display->setFont(font_12_alphanum);
+//     display->drawUTF8(0, 54, pos.c_str());
     // draw RSSI
     display->setDrawColor(0);
     display->drawBox(98, 0, 30, 8);
@@ -337,7 +555,10 @@ void ScreenWrapper::showLBJ2(const struct lbj_data &l, const struct rx_info &r) 
     display->printf("当前时间");
     display->setFont(font_15_alphanum_bold);
     display->setCursor(display->getCursorX() + 3, display->getCursorY() - 1);
-    display->printf("%s ", l.time);
+    uint16_t cx_prev = display->getCursorX();
+    display->printf("%s", l.time);
+    // drawEpi(l.type, 0, l.epi, cx_prev);
+    directDrawEpi(getErrorCount(0,l.epi),cx_prev,l.time,1,1);
     // sprintf(buffer, "当前时间 %s ", l.time);
     // display->drawUTF8(0, 21, buffer);
     // draw RSSI
@@ -644,4 +865,114 @@ void ScreenWrapper::autoSleep() {
 
 void ScreenWrapper::updateSleepTimestamp() {
     last_operation_time = millis64();
+}
+
+void ScreenWrapper::drawEpi(int8_t error, uint16_t cx_prev, const String &str) {
+    if (str.length() <= cx_prev)
+        return;
+    if (str[cx_prev] != '1' && str[cx_prev] != '2')
+        return;
+    uint16_t cx = display->getCursorX();
+    uint16_t cy = display->getCursorY();
+    if (error == 0) {
+        if (str[cx_prev] == '1') {
+            display->drawHLine(50, cy + 1, cx - 50);
+        } else if (str[cx_prev] == '2') {
+            // display->drawBox(50,cy+1,cx-50,display->getMaxCharHeight()+1);
+            display->drawFrame(48, cy - display->getMaxCharHeight() + 3, cx - 47, display->getMaxCharHeight() - 1);
+        }
+    }
+    display->setCursor(cx, cy);
+}
+
+void ScreenWrapper::drawEpi(int8_t type, int index, const String &epi, uint16_t cx_prev) {
+    if (epi.length() <= index)
+        return;
+    if (epi[index] != '1' && epi[index] != '2')
+        return;
+    uint16_t cx = display->getCursorX();
+    uint16_t cy = display->getCursorY();
+    switch (type) {
+        case 1: {
+            if (index == 0) {
+                if (epi[index] == '1') {
+                    display->drawHLine(cx_prev, cy, cx - cx_prev);
+                } else if (epi[index] == '2') {
+                    display->drawFrame(cx_prev - 1, cy - display->getMaxCharHeight() + 3, cx - cx_prev + 2,
+                                       display->getMaxCharHeight() - 2);
+                }
+            } else if (index == 1 || index == 2) {
+                if (epi[index] == '1') {
+                    display->drawHLine(cx_prev, cy, cx - cx_prev);
+                } else if (epi[index] == '2') {
+                    display->drawFrame(cx_prev - 2, cy - display->getMaxCharHeight() + 3, cx - cx_prev + 3,
+                                       display->getMaxCharHeight() - 2);
+                }
+            } else if (index > 2 && index < 9) {
+                if (epi[index] == '1') {
+                    display->drawHLine(cx_prev, cy, cx - cx_prev);
+                } else if (epi[index] == '2') {
+                    display->drawFrame(cx_prev - 1, cy - display->getMaxCharHeight() + 3, cx - cx_prev + 1,
+                                       display->getMaxCharHeight() - 2);
+                }
+            }
+            break;
+        }
+        case 2: {
+            if (epi[index] == '1') {
+                display->drawHLine(cx_prev, cy + 1, cx - cx_prev);
+            } else if (epi[index] == '2') {
+                display->drawFrame(cx_prev - 2, cy - display->getMaxCharHeight() + 3, cx - cx_prev + 3,
+                                   display->getMaxCharHeight() - 1);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    display->setCursor(cx, cy);
+}
+
+int8_t ScreenWrapper::getErrorCount(int index, const String &epi) {
+    if (epi.length() <= index)
+        return -1;
+    if (epi[index] != '1' && epi[index] != '2')
+        return -1;
+    return epi[index] - '0';
+}
+
+int8_t ScreenWrapper::getU8CharLen(uint8_t ch) {
+    if (ch <= 0x7F)
+        return 1;
+    else if (ch >= 0xC0 && ch <= 0xDF)
+        return 2;
+    else if (ch >= 0xE0 && ch <= 0xEF)
+        return 3;
+    else if (ch >= 0xF0 && ch <= 0xF7)
+        return 4;
+    else if (ch >= 0xF8 && ch <= 0xFB)
+        return 5;
+    else if (ch >= 0xFC && ch <= 0xFD)
+        return 6;
+    return 0;
+}
+
+void ScreenWrapper::directDrawEpi(int8_t error, uint16_t cx_prev, const String &str, int y_offset, int xl, int xr) {
+    if (error == -1 || !draw_epi)
+        return;
+    uint16_t cx = display->getCursorX();
+    uint16_t cy = display->getCursorY();
+    if (error == 1) {
+        display->drawHLine(cx_prev, display->getCursorY() + y_offset, display->getCursorX() - cx_prev);
+    } else if (error == 2) {
+        // uint16_t cy_prev = display->getCursorY();
+        display->drawBox(cx_prev - xl, display->getCursorY() - display->getMaxCharHeight() + 3,
+                         display->getCursorX() - cx_prev + xr + xl, display->getMaxCharHeight() - (2 - y_offset));
+        display->setDrawColor(0);
+        display->setCursor(cx_prev, cy);
+        display->print(str);
+        // Serial.println(route_char);
+        display->setDrawColor(1);
+    }
+    display->setCursor(cx, cy);
 }

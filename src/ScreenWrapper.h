@@ -87,9 +87,15 @@ protected:
     bool auto_sleep = AUTO_SLEEP;
     bool sleep = false;
     uint64_t last_operation_time = 0;
+    bool draw_epi = true;
 
 private:
     void pword(const char *msg, int xloc, int yloc);
+    void drawEpi(int8_t error, uint16_t cx_prev, const String &str);
+    void drawEpi(int8_t type, int index, const String &epi, uint16_t cx_prev);
+    void directDrawEpi(int8_t error, uint16_t cx_prev, const String &str, int y_offset = 0, int xl = 0, int xr = 0);
+    int8_t getErrorCount(int index, const String &epi);
+    int8_t getU8CharLen(uint8_t ch);
     bool low_volt_warned = false;
     bool update_top = true;
     const uint8_t *font_12_alphanum = u8g2_font_profont12_custom_tf;

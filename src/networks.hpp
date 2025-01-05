@@ -16,6 +16,7 @@
 #include "loco.h"
 #include "freertos/FreeRTOS.h"
 #include <esp_task_wdt.h>
+#include <cstdint>
 
 /* ------------------------------------------------ */
 #define LBJ_INFO_ADDR 1234000
@@ -49,6 +50,8 @@ struct lbj_data {
     char pos_lat_min[8] = "";
     char pos_lon[10] = "<NUL>"; // ---°--.----'
     char pos_lat[9] = "<NUL>"; // --°--.----'
+    // int u8char_len[8] = {0};
+    String epi;
 };
 
 struct rx_info {

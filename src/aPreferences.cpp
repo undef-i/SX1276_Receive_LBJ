@@ -63,8 +63,16 @@ bool aPreferences::append(lbj_data lbj, rx_info rx, float volt, float temp) {
             lbj.pos_lon_deg, lbj.pos_lon_min, lbj.pos_lat_deg, lbj.pos_lat_min, lbj.pos_lon, lbj.pos_lat);
     line += buffer;
     // rssi,fer,ppm,ids
-    sprintf(buffer, "%.2f,%.2f,%.2f,%u", rx.rssi, rx.fer, rx.ppm, ids);
+    sprintf(buffer, "%.2f,%.2f,%.2f,%u,", rx.rssi, rx.fer, rx.ppm, ids);
     line += buffer;
+    // epi
+    line += lbj.epi;
+    // line += ',';
+    // // u8char_len
+    // for (int i = 0; i < sizeof lbj.u8char_len / sizeof (int); ++i) {
+    //     sprintf(buffer, "%d",lbj.u8char_len[i]);
+    //     line += buffer;
+    // }
 
     sprintf(buffer, "I%04d", lines);
     pref.putString(buffer, line);
@@ -113,13 +121,14 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
     String line = pref.getString(buf);
     Serial.printf("[D] %s \n", line.c_str());
     // Tokenize
-    String tokens[28];
+    String tokens[29];
     for (size_t i = 0, c = 0; i < line.length(); i++) {
         if (line[i] == ',') {
             c++;
             continue;
         }
-        tokens[c] += line[i];
+        if (c < 29)
+            tokens[c] += line[i];
     }
     // sprintf(buffer, "%04d,%1.2f,%llu,", lines, volt, esp_timer_get_time());
     *line_num = std::stoi(tokens[0].c_str());
@@ -157,6 +166,7 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
     rx->fer = std::stof(tokens[25].c_str());
     rx->ppm = std::stof(tokens[26].c_str());
     *id = std::stoul(tokens[27].c_str());
+    lbj->epi = tokens[28];
     return true;
 }
 
