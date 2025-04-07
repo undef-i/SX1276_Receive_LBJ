@@ -300,7 +300,7 @@ void setup() {
 #ifdef HAS_RTC
     // rtc.begin();
     // rtc.getDateTime(time_info);
-    if(have_rtc) {
+    if (have_rtc) {
         time_info = rtcLibtoC(rtc.now());
         Serial.println(&time_info, "[eRTC] RTC Time %Y-%m-%d %H:%M:%S ");
         timeSync(time_info); // sync system time from rtc
@@ -1066,7 +1066,8 @@ void handleSerialInput() {
         } else if (in == "rssi") {
             Serial.printf("$ RSSI %3.2f dBm.\n", radio.getRSSI(false, true));
         } else if (in == "gain") {
-            Serial.printf("$ Gain Pos %d \n", radio.getGain());
+            Serial.printf("$ RegLna(0x0C) = 0x%x/",radio.getGain());
+            Serial.println(radio.getGain(), BIN);
         } else if (in == "cpu") {
             xTaskCreatePinnedToCore(getCoreFreq, "get_freq", 2048, nullptr,
                                     1, nullptr, 0);
@@ -1126,23 +1127,24 @@ void formatDataTask(void *pVoid) {
         if (db->pocsagData[i].is_empty)
             continue;
         empty = false;
-        for (int j = 0; j < db->pocsagData[i].epi.length(); j+=2) {
-            String epi_cw = db->pocsagData[i].epi.substring(j,j+2);
-            if (String(epi_cw[epi_cw.length()-1]) == "a") {
+        for (int j = 0; j < db->pocsagData[i].epi.length(); j += 2) {
+            String epi_cw = db->pocsagData[i].epi.substring(j, j + 2);
+            if (String(epi_cw[epi_cw.length() - 1]) == "a") {
                 if (j > 2) {
-                    if (!db->pocsagData[i+1].is_empty) {
+                    if (!db->pocsagData[i + 1].is_empty) {
                         String epi_next = db->pocsagData[i].epi.substring(j);
                         db->pocsagData[i + 1].epi = epi_next + db->pocsagData[i + 1].epi;
                         db->pocsagData[i].epi = db->pocsagData[i].epi.substring(0, j);
                         break;
-                    } else if (i == 0 && j+2 < db->pocsagData[i].epi.length()) {
+                    } else if (i == 0 && j + 2 < db->pocsagData[i].epi.length()) {
                         db->pocsagData[i].epi = db->pocsagData[i].epi.substring(j);
                         break;
                     }
                 }
             }
         }
-        Serial.printf("[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func, db->pocsagData[i].str.c_str());
+        Serial.printf("[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func,
+                      db->pocsagData[i].str.c_str());
         // String epi_s;
         // // [D-pDATA] 1234000/1: 50015  19 -----
         // // [D-pDATA] EPIs: 1    0    0    0
@@ -1159,7 +1161,8 @@ void formatDataTask(void *pVoid) {
         // }
         // Serial.printf("[D-pDATA] EPIs: %s\n", epi_s.c_str());
         Serial.printf("[D-pDATA] EPI: %s\n", db->pocsagData[i].epi.c_str());
-        sd1.append(2, "[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func, db->pocsagData[i].str.c_str());
+        sd1.append(2, "[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func,
+                   db->pocsagData[i].str.c_str());
         db->str = db->str + "  " + db->pocsagData[i].str;
     }
     if (empty) {
@@ -1210,7 +1213,7 @@ void formatDataTask(void *pVoid) {
     fd_state = TASK_RUNNING_SCREEN;
     if (u8g2) {
         oled.updateSleepTimestamp();
-        if (oled.isSleep()){
+        if (oled.isSleep()) {
             oled.setSleep(false);
             oled.updateInfo();
         }

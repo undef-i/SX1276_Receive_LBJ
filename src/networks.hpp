@@ -16,7 +16,6 @@
 #include "loco.h"
 #include "freertos/FreeRTOS.h"
 #include <esp_task_wdt.h>
-#include <cstdint>
 
 /* ------------------------------------------------ */
 #define LBJ_INFO_ADDR 1234000
@@ -159,9 +158,11 @@ void appendDataCSV(PagerClient::pocsag_data *p, const struct lbj_data &l, const 
 float getBias(float freq);
 
 #ifdef HAS_RTC
-tm rtcLibtoC(const DateTime& datetime);
+
+tm rtcLibtoC(const DateTime &datetime);
 
 DateTime rtcLibtoC(const tm &ctime);
+
 #endif
 
 #endif //PAGER_RECEIVE_NETWORKS_HPP

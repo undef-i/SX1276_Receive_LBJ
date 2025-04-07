@@ -2,7 +2,6 @@
 // Created by FLN1021 on 2024/2/10.
 //
 
-#include <cstdint>
 #include "ScreenWrapper.h"
 
 bool ScreenWrapper::setDisplay(DISPLAY_MODEL *display_ptr) {
@@ -157,7 +156,7 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     display->printf("%s", l.train);
     // draw epi
     // drawEpi(l.type, 0, l.epi);
-    directDrawEpi(getErrorCount(0,l.epi),50,l.train,1,1,1);
+    directDrawEpi(getErrorCount(0, l.epi), 50, l.train, 1, 1, 1);
     display->setFont(u8g2_font_wqy15_t_custom);
     display->setCursor(display->getCursorX() + 6, display->getCursorY());
     if (l.direction == FUNCTION_UP) {
@@ -180,7 +179,7 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     display->setFont(font_15_alphanum_bold);
     display->printf(" %s ", l.speed);
     // drawEpi(l.type, 1, l.epi);
-    directDrawEpi(getErrorCount(1,l.epi),50,l.speed,1,1,1);
+    directDrawEpi(getErrorCount(1, l.epi), 50, l.speed, 1, 1, 1);
     u8g2->setCursor(u8g2->getCursorX() + 7, u8g2->getCursorY());
     display->setFont(font_15_alphanum);
     display->printf("KM/H");
@@ -192,7 +191,7 @@ void ScreenWrapper::showLBJ0(const struct lbj_data &l, const struct rx_info &r) 
     display->setFont(font_15_alphanum_bold);
     display->printf("%s", l.position);
     // drawEpi(l.type, 2, l.epi);
-    directDrawEpi(getErrorCount(2,l.epi),50,l.position,1,1,1);
+    directDrawEpi(getErrorCount(2, l.epi), 50, l.position, 1, 1, 1);
     display->printf(" ");
     display->setCursor(display->getCursorX() + 4, display->getCursorY());
     display->setFont(font_15_alphanum);
@@ -267,7 +266,7 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     cx_prev = display->getCursorX();
     display->printf("%s", l.speed);
     // drawEpi(l.type, 1, l.epi, cx_prev);
-    directDrawEpi(getErrorCount(1, l.epi), cx_prev, l.speed,0,1);
+    directDrawEpi(getErrorCount(1, l.epi), cx_prev, l.speed, 0, 1);
     display->setCursor(display->getCursorX(), display->getCursorY());
     display->printf("KM/H");
     display->setFont(FONT_12_GB2312);
@@ -449,7 +448,7 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     cx_prev = display->getCursorX();
     display->printf("%s", l.position);
     // drawEpi(l.type, 2, l.epi, cx_prev);
-    directDrawEpi(getErrorCount(2, l.epi), cx_prev, l.position,0,1);
+    directDrawEpi(getErrorCount(2, l.epi), cx_prev, l.position, 0, 1);
     display->setCursor(display->getCursorX(), display->getCursorY());
     display->printf("K");
     display->setFont(FONT_12_GB2312);
@@ -492,21 +491,21 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         display->drawUTF8(72, 43, l.loco_type.c_str());
     // line 4
     String pos;
-    display->setCursor(0,54);
+    display->setCursor(0, 54);
     display->setFont(font_12_alphanum);
     if (l.pos_lat_deg[1] && l.pos_lat_min[1]) {
         sprintf(buffer, "%c", l.pos_lat_deg[0]);
         cx_prev = display->getCursorX();
         display->print(buffer);
-        directDrawEpi(getErrorCount(10,l.epi),cx_prev,buffer,0,1);
-        sprintf(buffer, "%c°%s", l.pos_lat_deg[1],String(l.pos_lat_min).substring(0,4).c_str());
+        directDrawEpi(getErrorCount(10, l.epi), cx_prev, buffer, 0, 1);
+        sprintf(buffer, "%c°%s", l.pos_lat_deg[1], String(l.pos_lat_min).substring(0, 4).c_str());
         cx_prev = display->getCursorX();
         display->print(buffer);
-        directDrawEpi(getErrorCount(11,l.epi),cx_prev,buffer,0,1);
+        directDrawEpi(getErrorCount(11, l.epi), cx_prev, buffer, 0, 1);
         sprintf(buffer, "%s'", String(l.pos_lat_min).substring(4).c_str());
         cx_prev = display->getCursorX();
         display->print(buffer);
-        directDrawEpi(getErrorCount(12,l.epi),cx_prev,buffer,0,1);
+        directDrawEpi(getErrorCount(12, l.epi), cx_prev, buffer, 0, 1);
         // sprintf(buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
         // pos += String(buffer);
     } else {
@@ -515,14 +514,14 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         // pos += String(buffer);
     }
     if (l.pos_lon_deg[1] && l.pos_lon_min[1]) {
-        sprintf(buffer, "%s°%s", l.pos_lon_deg, String(l.pos_lon_min).substring(0,3).c_str());
+        sprintf(buffer, "%s°%s", l.pos_lon_deg, String(l.pos_lon_min).substring(0, 3).c_str());
         cx_prev = display->getCursorX();
         display->print(buffer);
-        directDrawEpi(getErrorCount(9,l.epi),cx_prev,buffer,0,1);
+        directDrawEpi(getErrorCount(9, l.epi), cx_prev, buffer, 0, 1);
         sprintf(buffer, "%s'", String(l.pos_lon_min).substring(3).c_str());
         cx_prev = display->getCursorX();
         display->print(buffer);
-        directDrawEpi(getErrorCount(10,l.epi),cx_prev,buffer,0,1);
+        directDrawEpi(getErrorCount(10, l.epi), cx_prev, buffer, 0, 1);
         // sprintf(buffer, "%s°%s'", l.pos_lon_deg, l.pos_lon_min);
         // pos += String(buffer);
     } else {
@@ -558,7 +557,7 @@ void ScreenWrapper::showLBJ2(const struct lbj_data &l, const struct rx_info &r) 
     uint16_t cx_prev = display->getCursorX();
     display->printf("%s", l.time);
     // drawEpi(l.type, 0, l.epi, cx_prev);
-    directDrawEpi(getErrorCount(0,l.epi),cx_prev,l.time,1,1);
+    directDrawEpi(getErrorCount(0, l.epi), cx_prev, l.time, 1, 1);
     // sprintf(buffer, "当前时间 %s ", l.time);
     // display->drawUTF8(0, 21, buffer);
     // draw RSSI
@@ -755,7 +754,7 @@ void ScreenWrapper::showInfo(int8_t page) {
     if (page > 3 || page < 1)
         return;
     String tokens[28];
-    flash->retrieve(tokens, sizeof tokens, 0);
+    flash->retrieve(tokens, sizeof tokens / sizeof(String), 0);
     /* Standard format of cache:
      * 条目数,电压,系统时间,温度,日期,时间,type,train,direction,speed,position,time,info2_hex,loco_type,lbj_class,loco,route,
      * route_utf8,pos_lon_deg,pos_lon_min,pos_lat_deg,pos_lat_min,pos_lon,pos_lat,rssi,fer,ppm,id

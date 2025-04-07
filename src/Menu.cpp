@@ -231,7 +231,7 @@ void Menu::handleKey(bool up) {
             highlightIndex(selected_item);
             break;
         case MENU_INDEX_INPUT:
-            alterDigitIndex(selected_item,up);
+            alterDigitIndex(selected_item, up);
             break;
         case MENU_OLED:
             if (up)
@@ -377,7 +377,7 @@ void Menu::acknowledge() {
                         break;
                     }
                     selected_item = 0;
-                    bias = (int32_t) (getBias(actual_frequency) * 100);
+                    bias = (int32_t)(getBias(actual_frequency) * 100);
                     showReadPPM();
                     highlightReadPPM(selected_item);
                     break;
@@ -463,7 +463,7 @@ void Menu::acknowledge() {
             break;
         case MENU_INDEX:
             if (selected_item < 4) {
-                drawDigitIndex(selected_item,true,true);
+                drawDigitIndex(selected_item, true, true);
                 menu_page = MENU_INDEX_INPUT;
             } else if (selected_item == 4) {
                 // acknowledge
@@ -958,15 +958,15 @@ void Menu::alterDigitIndex(int8_t item, bool plus) {
              digits[2] == (PREF_MAX_LINES / 10) % 10)
         dmax = PREF_MAX_LINES % 10;
 
-    plus?digits[item]++:digits[item]--;
-    Serial.printf("digits %d\n",digits[item]);
+    plus ? digits[item]++ : digits[item]--;
+    Serial.printf("digits %d\n", digits[item]);
     if (digits[item] > dmax)
         digits[item] = 0;
     else if (digits[item] < 0)
         digits[item] = dmax;
-    Serial.printf("digits %d\n",digits[item]);
+    Serial.printf("digits %d\n", digits[item]);
     char buffer[2];
-    sprintf(buffer,"%1d",digits[item]);
+    sprintf(buffer, "%1d", digits[item]);
     items[item] = buffer;
     drawDigitIndex(item);
     // display->setFont(FONT_12_GB2312);

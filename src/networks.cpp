@@ -2,7 +2,6 @@
 // Created by FLN1021 on 2023/9/2.
 //
 
-#include <cstdint>
 #include "networks.hpp"
 
 /* ------------------------------------------------ */
@@ -447,7 +446,7 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                         l->epi += 'N';
                     }
                     if (l->epi.length() > 3)
-                        l->epi = l->epi.substring(0,3);
+                        l->epi = l->epi.substring(0, 3);
                     for (int j = 2; j < p[i].epi.length(); j += 2) {
                         if (j > 22 || p[i].epi[j + 1] != 'm' && p[i].epi[j + 1] != 'u')
                             break;
@@ -606,7 +605,7 @@ int8_t hexToChar(int8_t hex1, int8_t hex2) {
     else
         b = hex2 - 0x37;
 
-    return (int8_t) ((a << 4) | b);
+    return (int8_t)((a << 4) | b);
 }
 
 void recodeBCD(const char *c, String *v) {
@@ -704,7 +703,7 @@ void gbk2utf8(const char *gbk1, char *utf8s, size_t gbk_len) {
         if (gbk[i] < 0x80) {
             unic[c] = gbk[i];
         } else {
-            unic[c] = ff_oem2uni((uint16_t) (gbk[i] << 8 | gbk[i + 1]), 936);
+            unic[c] = ff_oem2uni((uint16_t)(gbk[i] << 8 | gbk[i + 1]), 936);
             i++;
         }
     }

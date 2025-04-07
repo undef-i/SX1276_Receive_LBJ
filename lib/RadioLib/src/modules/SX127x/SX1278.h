@@ -203,7 +203,7 @@ class SX1278: public SX127x {
     int16_t setGain(uint8_t gain);
 
     /*!
-      \brief FLN1021 Add function, retrive current gain from SPI Reg.
+      \brief FLN1021 Add function, retrieve current gain from SPI Reg.
     */
     int16_t getGain();
 

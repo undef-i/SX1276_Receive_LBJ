@@ -232,7 +232,7 @@ bool aPreferences::retrieve(String *str_array, uint32_t arr_size, int8_t bias) {
     Serial.printf("[D] ret_line = %d\n", ret_lines);
     String line = pref.getString(buf);
     Serial.printf("[D] %s \n", line.c_str());
-
+    Serial.printf("arr size = %d\n",arr_size);
     // Tokenize
     // String tokens[28];
     for (size_t i = 0, c = 0; i < line.length(); i++) {

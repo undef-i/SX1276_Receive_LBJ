@@ -14,14 +14,14 @@
 #define AUTO_SLEEP true
 #ifdef HAS_DISPLAY
 
-enum top_sectors{
+enum top_sectors {
     TOP_SECTOR_TIME,
     TOP_SECTOR_TEMPERATURE,
     TOP_SECTOR_RSSI,
     TOP_SECTOR_ALL
 };
 
-enum bottom_sectors{
+enum bottom_sectors {
     BOTTOM_SECTOR_IP,
     BOTTOM_SECTOR_PPM,
     BOTTOM_SECTOR_IND,
@@ -57,7 +57,7 @@ public:
 
     void showSelectedLBJ(int8_t bias);
 
-    void showSelectedLBJ(aPreferences *flash_cls , int8_t bias);
+    void showSelectedLBJ(aPreferences *flash_cls, int8_t bias);
 
     void showInfo(int8_t page = 1);
 
@@ -70,19 +70,27 @@ public:
     void updateSleepTimestamp();
 
     void clearTop(top_sectors sector, bool sendBuffer);
+
     void clearCenter(bool sendBuffer);
+
     void clearBottom(bottom_sectors sector, bool sendBuffer);
+
     void clearAll();
+
     bool isEnabled() const;
+
     void setEnable(bool is_enable);
+
     void setSleep(bool is_sleep);
+
     bool isSleep() const;
 
 protected:
-    void pwordUTF8(const String& msg, int xloc, int yloc, int xmax, int ymax);
+    void pwordUTF8(const String &msg, int xloc, int yloc, int xmax, int ymax);
+
     bool update = true;
     DISPLAY_MODEL *display = nullptr;
-    aPreferences *flash;
+    aPreferences *flash{};
     bool enabled = true;
     bool auto_sleep = AUTO_SLEEP;
     bool sleep = false;
@@ -91,11 +99,17 @@ protected:
 
 private:
     void pword(const char *msg, int xloc, int yloc);
+
     void drawEpi(int8_t error, uint16_t cx_prev, const String &str);
+
     void drawEpi(int8_t type, int index, const String &epi, uint16_t cx_prev);
+
     void directDrawEpi(int8_t error, uint16_t cx_prev, const String &str, int y_offset = 0, int xl = 0, int xr = 0);
+
     int8_t getErrorCount(int index, const String &epi);
+
     int8_t getU8CharLen(uint8_t ch);
+
     bool low_volt_warned = false;
     bool update_top = true;
     const uint8_t *font_12_alphanum = u8g2_font_profont12_custom_tf;
