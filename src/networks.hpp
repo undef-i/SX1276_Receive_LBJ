@@ -30,8 +30,7 @@
 
 #define POCDAT_SIZE 16 // defines number of the pocsag data structures.
 
-struct lbj_data
-{
+struct lbj_data {
     int8_t type = -1;
     char train[6] = "<NUL>";
     int8_t direction = -1;
@@ -40,9 +39,9 @@ struct lbj_data
     char time[6] = "<NUL>";
     String info2_hex;
     String loco_type;
-    //    char info2_hex[51] = "<NUL>";
-    char lbj_class[3] = "NA";    // '0X' or ' X'
-    char loco[9] = "<NUL>";      // such as 23500331
+//    char info2_hex[51] = "<NUL>";
+    char lbj_class[3] = "NA"; // '0X' or ' X'
+    char loco[9] = "<NUL>"; // such as 23500331
     char route[17] = "********"; // 16 bytes GBK data.
     char route_utf8[17 * 2] = "********";
     char pos_lon_deg[4] = ""; // ---
@@ -50,11 +49,10 @@ struct lbj_data
     char pos_lat_deg[3] = ""; // --
     char pos_lat_min[8] = "";
     char pos_lon[10] = "<NUL>"; // ---°--.----'
-    char pos_lat[9] = "<NUL>";  // --°--.----'
+    char pos_lat[9] = "<NUL>"; // --°--.----'
 };
 
-struct rx_info
-{
+struct rx_info {
     float rssi = 0;
     float fer = 0;
     float ppm = 0;
@@ -62,8 +60,7 @@ struct rx_info
     uint64_t timer = 0;
 };
 
-struct data_bond
-{
+struct data_bond {
     PagerClient::pocsag_data pocsagData[POCDAT_SIZE];
     lbj_data lbjData;
     String str;
@@ -131,7 +128,7 @@ void setupTelnet();
 
 void timeTask(void *pVoid);
 
-// extern bool ipChanged(uint16_t interval);
+//extern bool ipChanged(uint16_t interval);
 
 int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l);
 
@@ -160,9 +157,9 @@ void appendDataCSV(PagerClient::pocsag_data *p, const struct lbj_data &l, const 
 float getBias(float freq);
 
 #ifdef HAS_RTC
-tm rtcLibtoC(const DateTime &datetime);
+tm rtcLibtoC(const DateTime& datetime);
 
 DateTime rtcLibtoC(const tm &ctime);
 #endif
 
-#endif // PAGER_RECEIVE_NETWORKS_HPP
+#endif //PAGER_RECEIVE_NETWORKS_HPP
