@@ -39,7 +39,7 @@
 // configure the wifi connection
 #define WIFI_SSID "SSID"
 #define WIFI_PASSWORD "PASSWORD"
-#define USE_SMARTCONFIG 1 // 0: use saved wifi, 1: use smartconfig
+#define IS_USE_SMARTCONFIG 1 // 0: use saved wifi, 1: use smartconfig
 
 #define WDT_TIMEOUT 20 // sec
 // #define WDT_RST_PERIOD 4000 // ms
@@ -646,7 +646,7 @@ void setup()
         u8g2->sendBuffer();
     }
 
-#if USE_SMARTCONFIG
+#if IS_USE_SMARTCONFIG
 
     // initialize wireless network.
     Serial.printf("Connecting to WiFi\n");
