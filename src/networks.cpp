@@ -117,7 +117,12 @@ void changeCpuFreq(uint32_t freq_mhz) {
         Serial.printf("[D] WIFI OFF [%llu] \n", millis64() - timer);
         if (ets_get_cpu_frequency() != freq_mhz)
             setCpuFrequencyMhz(freq_mhz);
+        // fixme: this needs to be modified to fit the requirement.
+#ifdef USE_SMARTCONFIG
         connectWiFi();
+#else
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#endif
         // Serial.println("[D] WIFI BEGIN");
         WiFiClass::mode(WIFI_MODE_STA);
         // Serial.println("[D] WIFI STA");

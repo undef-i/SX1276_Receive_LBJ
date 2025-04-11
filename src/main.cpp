@@ -34,12 +34,6 @@
 #include "coredump.h"
 #include "customfont.h"
 #include <esp_task_wdt.h>
-#include <Preferences.h>
-
-// configure the wifi connection
-#define WIFI_SSID "SSID"
-#define WIFI_PASSWORD "PASSWORD"
-#define IS_USE_SMARTCONFIG 1 // 0: use saved wifi, 1: use smartconfig
 
 #define WDT_TIMEOUT 20 // sec
 // #define WDT_RST_PERIOD 4000 // ms
@@ -603,8 +597,7 @@ void setup() {
         u8g2->sendBuffer();
     }
 
-#if IS_USE_SMARTCONFIG
-
+#ifdef USE_SMARTCONFIG
     // initialize wireless network.
     Serial.printf("Connecting to WiFi\n");
 
@@ -616,16 +609,18 @@ void setup() {
 
     if (!savedSSID.isEmpty() && !savedPassword.isEmpty()) {
         if (u8g2) {
-            showInitComp();
-            u8g2->setFont(FONT_12_GB2312);
+            u8g2->setDrawColor(0);
+            u8g2->drawBox(0, 42, 128, 14);
+            u8g2->setDrawColor(1);
             u8g2->setCursor(0, 52);
             u8g2->println("Waiting for WiFi...");
             u8g2->sendBuffer();
         }
         if (!connectToWiFi(savedSSID, savedPassword)) {
             if (u8g2) {
-                showInitComp();
-                u8g2->setFont(FONT_12_GB2312);
+                u8g2->setDrawColor(0);
+                u8g2->drawBox(0, 42, 128, 14);
+                u8g2->setDrawColor(1);
                 u8g2->setCursor(0, 40);
                 u8g2->println("Failed to connect to Wifi");
                 u8g2->setCursor(0, 52);
@@ -636,8 +631,9 @@ void setup() {
         }
     } else {
         if (u8g2) {
-            showInitComp();
-            u8g2->setFont(FONT_12_GB2312);
+            u8g2->setDrawColor(0);
+            u8g2->drawBox(0, 42, 128, 14);
+            u8g2->setDrawColor(1);
             u8g2->setCursor(0, 52);
             u8g2->println("Waiting for SmartConfig...");
             u8g2->sendBuffer();
@@ -652,25 +648,17 @@ void setup() {
     preferences.putString("ssid", WiFi.SSID());
     preferences.putString("password", WiFi.psk());
     preferences.end();
-
 #else
-
     // initialize wireless network.
     Serial.printf("Connecting to WiFi %s\n", WIFI_SSID);
-    if (u8g2)
-    {
-        showInitComp();
-        u8g2->setFont(FONT_12_GB2312);
-        u8g2->setCursor(0, 52);
-        u8g2->println("Connecting to WiFi...");
+    if (u8g2) {
+        u8g2->setDrawColor(0);
+        u8g2->drawBox(0, 42, 128, 14);
+        u8g2->setDrawColor(1);
+        u8g2->drawStr(0, 52, "Connecting to WiFi...");
         u8g2->sendBuffer();
     }
-    if (!connectToWiFi(WIFI_SSID, WIFI_PASSWORD))
-    {
-        Serial.println("Failed to connect to WiFi");
-        no_wifi = true;
-    }
-
+    connectToWiFi(WIFI_SSID, WIFI_PASSWORD);
 #endif
 
     if (isConnected()) {
@@ -897,7 +885,11 @@ void loop() {
             WiFiClass::mode(WIFI_OFF);
             setCpuFrequencyMhz(80);
             WiFiClass::mode(WIFI_MODE_STA);
+#ifdef USE_SMARTCONFIG
             connectWiFi();
+#else
+            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#endif
         }
         exec_init_f80 = true;
     }
