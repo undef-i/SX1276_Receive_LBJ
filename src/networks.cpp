@@ -13,6 +13,8 @@ uint16_t port = 23;
 const char *time_zone = "CST-8";
 const char *ntpServer1 = "pool.ntp.org";
 const char *ntpServer2 = "time.nist.gov";
+String wifiSSID = "";
+String wifiPassword = "";
 
 struct tm time_info{};
 
@@ -58,10 +60,17 @@ bool connectToWiFi(const String &ssid, const String &password) {
 
 bool connectWiFi() {
     WiFiClass::mode(WIFI_STA);
+    if (!wifiPassword.isEmpty() && !wifiSSID.isEmpty()) {
+        WiFi.begin(wifiSSID, wifiPassword);
+        Serial.println("[Network]Connecting to WiFi...");
+    }
+
     preferences.begin("wifi-config", false);
 
     String savedSSID = preferences.getString("ssid", "");
     String savedPassword = preferences.getString("password", "");
+    wifiSSID = preferences.getString("ssid", "");
+    wifiPassword = preferences.getString("password", "");
 
     if (!savedSSID.isEmpty() && !savedPassword.isEmpty()) {
         if (!connectToWiFi(savedSSID, savedPassword)) {
