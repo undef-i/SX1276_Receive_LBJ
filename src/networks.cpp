@@ -13,8 +13,6 @@ uint16_t port = 23;
 const char *time_zone = "CST-8";
 const char *ntpServer1 = "pool.ntp.org";
 const char *ntpServer2 = "time.nist.gov";
-String wifiSSID = "";
-String wifiPassword = "";
 
 struct tm time_info{};
 
@@ -41,14 +39,14 @@ void performSmartConfig() {
     Serial.println("[Network]WiFi credentials saved.");
 }
 
-bool connectToWiFi(const String &ssid, const String &password) {
+bool connectToWiFi(const String &ssid, const String &password, int timeout) {
     WiFi.begin(ssid.c_str(), password.c_str());
-    Serial.println("Connecting to saved WiFi...");
-    unsigned long startAttemptTime = millis();
+    Serial.print("Connecting to saved WiFi...");
+    auto startAttemptTime = millis64();
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
-        if (millis() - startAttemptTime > 10000) // Retry for 10 seconds
+        if (millis64() - startAttemptTime > timeout) // Retry for 10 seconds
         {
             Serial.println("\n[Network]Failed to connect.");
             return false;
@@ -73,7 +71,7 @@ bool connectWiFi() {
     wifiPassword = preferences.getString("password", "");
 
     if (!savedSSID.isEmpty() && !savedPassword.isEmpty()) {
-        if (!connectToWiFi(savedSSID, savedPassword)) {
+        if (!connectToWiFi(savedSSID, savedPassword, 10000)) {
             performSmartConfig();
         }
     } else {
@@ -113,7 +111,7 @@ void changeCpuFreq(uint32_t freq_mhz) {
         if (ets_get_cpu_frequency() != freq_mhz) {
             setCpuFrequencyMhz(freq_mhz);
             if (no_wifi) {
-                auto timer = millis64();
+                // auto timer = millis64();
                 WiFiClass::mode(WIFI_OFF);
                 WiFi.setSleep(true);
                 // Serial.printf("[D] Switch to 80MHz, WIFI OFF [%llu] \n", millis64() - timer);
@@ -128,9 +126,10 @@ void changeCpuFreq(uint32_t freq_mhz) {
             setCpuFrequencyMhz(freq_mhz);
         // fixme: this needs to be modified to fit the requirement.
 #ifdef USE_SMARTCONFIG
-        connectWiFi();
+        // connectWiFi();
+        WiFi.begin(wifiSSID, wifiPassword);
 #else
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        WiFi.begin(wifiSSID, wifiPassword);
 #endif
         // Serial.println("[D] WIFI BEGIN");
         WiFiClass::mode(WIFI_MODE_STA);

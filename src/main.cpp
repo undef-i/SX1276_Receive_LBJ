@@ -35,6 +35,11 @@
 #include "customfont.h"
 #include <esp_task_wdt.h>
 
+// configure the wifi connection
+String wifiSSID = "MI CC9 Pro";
+String wifiPassword = "11223344";
+#define NETWORK_TIMEOUT 1800000 // 30 minutes
+
 #define WDT_TIMEOUT 20 // sec
 // #define WDT_RST_PERIOD 4000 // ms
 #define FD_TASK_STACK_SIZE 3000 // 68200
@@ -616,7 +621,7 @@ void setup() {
             u8g2->println("Waiting for WiFi...");
             u8g2->sendBuffer();
         }
-        if (!connectToWiFi(savedSSID, savedPassword)) {
+        if (!connectToWiFi(savedSSID, savedPassword, 10000)) {
             if (u8g2) {
                 u8g2->setDrawColor(0);
                 u8g2->drawBox(0, 42, 128, 14);
@@ -648,9 +653,11 @@ void setup() {
     preferences.putString("ssid", WiFi.SSID());
     preferences.putString("password", WiFi.psk());
     preferences.end();
+    wifiSSID = WiFi.SSID();
+    wifiPassword = WiFi.psk();
 #else
     // initialize wireless network.
-    Serial.printf("Connecting to WiFi %s\n", WIFI_SSID);
+    Serial.printf("Connecting to WiFi %s\n", wifiSSID.c_str());
     if (u8g2) {
         u8g2->setDrawColor(0);
         u8g2->drawBox(0, 42, 128, 14);
@@ -658,19 +665,19 @@ void setup() {
         u8g2->drawStr(0, 52, "Connecting to WiFi...");
         u8g2->sendBuffer();
     }
-    connectToWiFi(WIFI_SSID, WIFI_PASSWORD);
+    connectToWiFi(wifiSSID, wifiPassword, 1000);
 #endif
 
     if (isConnected()) {
         ip = WiFi.localIP();
-        Serial.println();
+        // Serial.println();
         Serial.print("[Telnet] ");
         Serial.print(ip);
         Serial.print(":");
         Serial.println(port);
         setupTelnet(); // todo: find another library / modify the code to support multiple client connection.
     } else {
-        Serial.println();
+        // Serial.println();
         Serial.println("Error connecting to WiFi, Telnet startup skipped.");
     }
 
@@ -775,7 +782,7 @@ void handleSync() {
 void handleTelnet() {
     if (isConnected() && !telnet_online) {
         ip = WiFi.localIP();
-        Serial.printf("WIFI Connection to %s established.\n", WIFI_SSID);
+        Serial.printf("WIFI Connection to %s established.\n", wifiSSID.c_str());
         Serial.print("[Telnet] ");
         Serial.print(ip);
         Serial.print(":");
@@ -886,9 +893,10 @@ void loop() {
             setCpuFrequencyMhz(80);
             WiFiClass::mode(WIFI_MODE_STA);
 #ifdef USE_SMARTCONFIG
-            connectWiFi();
+            // connectWiFi();
+            WiFi.begin(wifiSSID, wifiPassword);
 #else
-            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            WiFi.begin(wifiSSID, wifiPassword);
 #endif
         }
         exec_init_f80 = true;
