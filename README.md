@@ -128,6 +128,8 @@ frequency error caused by crystal or the transmitter. This mechanism can be disa
 
 The device provides Bluetooth Low Energy for transmitting train data to mobile applications. This feature allows users to receive LBJ messages on their mobile devices through a custom application.
 
+For a working Bluetooth client implementation, please refer to [LBJ_Console](https://github.com/undef-i/LBJ_Console) which provides a practical example.
+
 #### Bluetooth Specifications
 - Service UUID: `0000FFE0-0000-1000-8000-00805F9B34FB` (HM-10 compatible)
 - Characteristic UUID: `0000FFE1-0000-1000-8000-00805F9B34FB` (TX characteristic)
