@@ -11,7 +11,7 @@
    This example shows how to receive FSK packets without using
    SX127x packet engine.
 
-   This example receives POCSAG messages using SX1278's
+   This example receives POCSAG messages using SX1278's【
    FSK modem in direct mode.
 
    Other modules that can be used to receive POCSAG:
@@ -104,7 +104,7 @@ bool oled_off = false;
 bool give_tel_rssi = false;
 bool give_tel_gain = false;
 bool tel_set_ppm = false;
-bool no_wifi = false;
+bool no_wifi = true;
 bool have_cd = false;
 bool telnet_online = false;
 bool ble_enabled = true;
@@ -128,6 +128,16 @@ struct data_bond *db = nullptr;
 //endregion
 
 //region Functions
+// 将电池电压转换为电量百分比
+int voltageToPercentage(float voltage) {
+    // 假设锂电池的工作电压范围为3.0V-4.2V
+    if (voltage >= 4.2f) return 100;
+    if (voltage <= 3.0f) return 0;
+    
+    // 线性映射电压到百分比
+    return (int)((voltage - 3.0f) / 1.2f * 100.0f);
+}
+
 void formatDataTask(void *pVoid);
 
 void simpleFormatTask();
@@ -187,8 +197,12 @@ void showInitComp() {
     u8g2->clearBuffer();
     u8g2->setFont(u8g2_font_squeezed_b7_tr);
     // bottom (0,56,128,8)
-    String ipa = WiFi.localIP().toString();
-    u8g2->drawStr(0, 64, ipa.c_str());
+    if (!no_wifi) {
+        String ipa = WiFi.localIP().toString();
+        u8g2->drawStr(0, 64, ipa.c_str());
+    } else {
+        u8g2->drawStr(0, 64, BLE_DEVICE_NAME);
+    }
     if (have_sd && WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "D");
     else if (have_sd)
@@ -196,16 +210,34 @@ void showInitComp() {
     else if (WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "N");
     char buffer[32];
-    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
-    u8g2->drawStr(96, 64, buffer);
-    sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
-    u8g2->drawStr(108, 64, buffer);
+    // CPU频率显示：如果有SNTP则简写，否则完整显示
+    if (getLocalTime(&time_info, 0)) {
+        // 有SNTP时间，使用简写显示
+        sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
+        u8g2->drawStr(96, 64, buffer);
+    } else {
+        // 无SNTP时间，使用完整显示并右对齐
+        sprintf(buffer, "%uMHz", ets_get_cpu_frequency());
+        int width = u8g2->getStrWidth(buffer);
+        u8g2->drawStr(128 - width, 64, buffer);
+    }
+
+    float batt_voltage = battery.readVoltage() * 2;
+    int batt_percent = voltageToPercentage(batt_voltage);
+    
+    // 仅当左上角不显示电池电量时，才在右下角显示
+    if (getLocalTime(&time_info, 0)) {
+        sprintf(buffer, "%d%%", batt_percent);
+        u8g2->drawStr(108, 64, buffer);
+    }
     // top (0,0,128,8)
-    if (!getLocalTime(&time_info, 0))
-        u8g2->drawStr(0, 7, "NO SNTP");
-    else {
+    if (getLocalTime(&time_info, 0)) {
         sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
                 time_info.tm_hour, time_info.tm_min);
+        u8g2->drawStr(0, 7, buffer);
+    } else {
+        // 如果没有SNTP时间，在左上角显示电池电量百分比
+        sprintf(buffer, "%d%%", batt_percent);
         u8g2->drawStr(0, 7, buffer);
     }
     u8g2->sendBuffer();
@@ -218,11 +250,14 @@ void updateInfo() {
     u8g2->setFont(u8g2_font_squeezed_b7_tr);
     u8g2->drawBox(0, 0, 97, 8);
     u8g2->setDrawColor(1);
-    if (!getLocalTime(&time_info, 0))
-        u8g2->drawStr(0, 7, "NO SNTP");
-    else {
+    if (getLocalTime(&time_info, 0)) {
         sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
                 time_info.tm_hour, time_info.tm_min);
+        u8g2->drawStr(0, 7, buffer);
+    } else {
+        // 如果没有SNTP时间，在左上角显示电池电量百分比
+        int batt_percent = voltageToPercentage(voltage);
+        sprintf(buffer, "%d%%", batt_percent);
         u8g2->drawStr(0, 7, buffer);
     }
 #ifdef HAS_RTC
@@ -237,7 +272,7 @@ void updateInfo() {
         String ipa = WiFi.localIP().toString();
         u8g2->drawStr(0, 64, ipa.c_str());
     } else
-        u8g2->drawStr(0, 64, "WIFI OFF");
+        u8g2->drawStr(0, 64, BLE_DEVICE_NAME);
     sprintf(buffer, "%.1f", getBias(actual_frequency));
     u8g2->drawStr(73, 64, buffer);
     if (sd1.status() && WiFiClass::status() == WL_CONNECTED)
@@ -246,16 +281,34 @@ void updateInfo() {
         u8g2->drawStr(89, 64, "L");
     else if (WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "N");
-    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
-    u8g2->drawStr(96, 64, buffer);
+
+    // CPU频率显示：如果有SNTP则简写，否则完整显示
+    if (getLocalTime(&time_info, 0)) {
+        // 有SNTP时间，使用简写显示
+        sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
+        u8g2->drawStr(96, 64, buffer);
+    } else {
+        // 无SNTP时间，使用完整显示并右对齐
+        sprintf(buffer, "%uMHz", ets_get_cpu_frequency());
+        int width = u8g2->getStrWidth(buffer);
+        u8g2->drawStr(128 - width, 64, buffer);
+    }
     voltage = battery.readVoltage() * 2;
-    sprintf(buffer, "%1.2f", voltage); // todo: Implement average voltage reading.
+    int batt_percent = voltageToPercentage(voltage);
+    
+
+    if (getLocalTime(&time_info, 0)) {
+        sprintf(buffer, "%d%%", batt_percent);
+        u8g2->drawStr(108, 64, buffer);
+    }
+    
     if (voltage < 3.15 && !low_volt_warned) {
-        Serial.printf("Warning! Low Voltage detected, %1.2fV\n", voltage);
-        sd1.append("低压警告，电池电压%1.2fV\n", voltage);
+        Serial.printf("Warning! Low Voltage detected, %1.2fV (%d%%)\n", voltage, batt_percent);
+        if (!no_sd && have_sd) {
+            sd1.append("低压警告，电池电压%1.2fV (%d%%)\n", voltage, batt_percent);
+        }
         low_volt_warned = true;
     }
-    u8g2->drawStr(108, 64, buffer);
     u8g2->sendBuffer();
 }
 
@@ -326,7 +379,7 @@ void showLBJ1(const struct lbj_data &l) {
     // line 1
     u8g2->setCursor(0, 19);
     u8g2->printf("车:");
-    u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
+    u8g2->setCursor(u8g2->getCursorX() + 2, u8g2->getCursorY());
     u8g2->setFont(u8g2_font_profont12_custom_tf);
     for (int i = 0, c = 0; i < 6; i++) {
         if (i == 5) {
@@ -338,20 +391,29 @@ void showLBJ1(const struct lbj_data &l) {
         buffer[c] = l.train[i];
         ++c;
     }
-    u8g2->printf("%s%s", l.lbj_class, buffer);
+    
+    // 去除lbj_class中的空格
+    char cls_buf[3];
+    int j = 0;
+    for (int i = 0; i < 2 && l.lbj_class[i] != '\0'; i++) {
+        if (l.lbj_class[i] != ' ') {
+            cls_buf[j++] = l.lbj_class[i];
+        }
+    }
+    cls_buf[j] = '\0';
+    
+    u8g2->printf("%s%s", cls_buf, buffer);
     u8g2->setFont(FONT_12_GB2312);
     u8g2->setCursor(68, 19);
     u8g2->printf("速:");
-    u8g2->setCursor(u8g2->getCursorX() + 2, u8g2->getCursorY());
+    u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
     u8g2->setFont(u8g2_font_profont12_custom_tf);
-    u8g2->printf("%s", l.speed);
-    u8g2->setCursor(u8g2->getCursorX(), u8g2->getCursorY());
-    u8g2->printf("KM/H");
+    u8g2->printf("%sKM/H", l.speed);
     u8g2->setFont(FONT_12_GB2312);
     // line 2
     u8g2->setCursor(0, 31);
     u8g2->printf("线:");
-    u8g2->setCursor(u8g2->getCursorX() + 2, u8g2->getCursorY());
+    u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
     u8g2->printf("%s", l.route_utf8);
     u8g2->drawBox(67, 21, 13, 12);
     u8g2->setDrawColor(0);
@@ -366,44 +428,59 @@ void showLBJ1(const struct lbj_data &l) {
     u8g2->setDrawColor(1);
     u8g2->setCursor(84, 31);
     u8g2->setFont(u8g2_font_profont12_custom_tf);
-    u8g2->printf("%s", l.position);
-    u8g2->setCursor(u8g2->getCursorX(), u8g2->getCursorY());
-    u8g2->printf("K");
+    u8g2->printf("%sK", l.position);
     u8g2->setFont(FONT_12_GB2312);
     // line 3
     u8g2->setCursor(0, 43);
-    u8g2->printf("号:");
-    u8g2->setCursor(u8g2->getCursorX() + 1, u8g2->getCursorY());
-    u8g2->setFont(u8g2_font_profont12_custom_tf);
-    u8g2->printf("%s", l.loco);
-    if (String(l.loco) != "<NUL>" && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
-        if (l.info2_hex[13] == '1')
-            u8g2->printf("A");
-        else if (l.info2_hex[13] == '2')
-            u8g2->printf("B");
-    }
+    // 第三行：左边显示机车型号，右边显示机车编号（右对齐）
+    
+    // 左边显示机车型号
     u8g2->setFont(FONT_12_GB2312);
     if (l.loco_type.length())
-        u8g2->drawUTF8(72, 43, l.loco_type.c_str());
-    // line 4
-    String pos;
-    if (l.pos_lat_deg[1] && l.pos_lat_min[1]) {
-        sprintf(buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
-        pos += String(buffer);
+        u8g2->drawUTF8(0, 43, l.loco_type.c_str());
+    
+    // 右边显示机车编号（右对齐）
+    u8g2->setFont(u8g2_font_profont12_custom_tf);
+    
+    // 构建带后缀的机车编号
+    char loco_with_suffix[16] = {0};
+    if (String(l.loco) != "<NUL>" && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
+        if (l.info2_hex[13] == '1')
+            sprintf(loco_with_suffix, "%sA", l.loco);
+        else if (l.info2_hex[13] == '2')
+            sprintf(loco_with_suffix, "%sB", l.loco);
+        else
+            strcpy(loco_with_suffix, l.loco);
     } else {
-        sprintf(buffer, "%s ", l.pos_lat);
-        pos += String(buffer);
+        strcpy(loco_with_suffix, l.loco);
     }
+    
+    // 计算宽度并右对齐显示
+    if (strcmp(loco_with_suffix, "<NUL>") != 0) {
+        int width = u8g2->getStrWidth(loco_with_suffix);
+        u8g2->drawStr(128 - width, 43, loco_with_suffix);
+    }
+    // line 4 - 优化位置信息显示
+    char pos_buffer[64] = {0};
+    
+    // 处理纬度
+    if (l.pos_lat_deg[1] && l.pos_lat_min[1]) {
+        sprintf(pos_buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
+    } else if (l.pos_lat[0] != '<') { // 不是<NUL>等占位符
+        sprintf(pos_buffer, "%s ", l.pos_lat);
+    }
+    
+    // 处理经度
     if (l.pos_lon_deg[1] && l.pos_lon_min[1]) {
         sprintf(buffer, "%s°%s'", l.pos_lon_deg, l.pos_lon_min);
-        pos += String(buffer);
-    } else {
-        sprintf(buffer, "%s ", l.pos_lon);
-        pos += String(buffer);
+        strcat(pos_buffer, buffer);
+    } else if (l.pos_lon[0] != '<') { // 不是<NUL>等占位符
+        sprintf(buffer, "%s", l.pos_lon);
+        strcat(pos_buffer, buffer);
     }
-//    sprintf(buffer,"%s°%s'%s°%s'",l.pos_lat_deg,l.pos_lat_min,l.pos_lon_deg,l.pos_lon_min);
+    
     u8g2->setFont(u8g2_font_profont12_custom_tf);
-    u8g2->drawUTF8(0, 54, pos.c_str());
+    u8g2->drawUTF8(0, 54, pos_buffer);
     // draw RSSI
     u8g2->setDrawColor(0);
     u8g2->drawBox(98, 0, 30, 8);
@@ -735,8 +812,10 @@ void setup() {
     runtime_timer = millis64();
     esp_reset_reason_t reset_reason = esp_reset_reason();
     initBoard();
-    sd1.setFS(SD);
-    delay(150);
+    if (!no_sd) {
+        sd1.setFS(SD);
+        delay(150);
+    }
 
     // Configure time sync.
     sntp_set_time_sync_notification_cb(timeAvailable);
@@ -753,7 +832,7 @@ void setup() {
 #endif
 
     Serial.printf("RST: %s\n", printResetReason(reset_reason).c_str());
-    if (have_sd) {
+    if (have_sd && !no_sd) {
         sd1.begin("/LOGTEST");
         sd1.beginCSV("/CSVTEST");
         sd1.append("电池电压 %1.2fV\n", battery.readVoltage() * 2);
@@ -777,19 +856,25 @@ void setup() {
     }
 
     // initialize wireless network.
-    Serial.printf("Connecting to %s ", WIFI_SSID);
-    connectWiFi(WIFI_SSID, WIFI_PASSWORD, 1); // usually max_tries = 25.
-    if (isConnected()) {
-        ip = WiFi.localIP();
-        Serial.println();
-        Serial.print("[Telnet] ");
-        Serial.print(ip);
-        Serial.print(":");
-        Serial.println(port);
-        setupTelnet(); // todo: find another library / modify the code to support multiple client connection.
+    if (!no_wifi) {
+        Serial.printf("Connecting to %s ", WIFI_SSID);
+        connectWiFi(WIFI_SSID, WIFI_PASSWORD, 1); // usually max_tries = 25.
+        if (isConnected()) {
+            ip = WiFi.localIP();
+            Serial.println();
+            Serial.print("[Telnet] ");
+            Serial.print(ip);
+            Serial.print(":");
+            Serial.println(port);
+            setupTelnet(); // todo: find another library / modify the code to support multiple client connection.
+        } else {
+            Serial.println();
+            Serial.println("Error connecting to WiFi, Telnet startup skipped.");
+        }
     } else {
-        Serial.println();
-        Serial.println("Error connecting to WiFi, Telnet startup skipped.");
+        Serial.println("WiFi is disabled.");
+        WiFiClass::mode(WIFI_OFF);
+        WiFi.setSleep(true);
     }
 
     // Initialize SX1276
@@ -814,7 +899,9 @@ void setup() {
 
     digitalWrite(BOARD_LED, LED_OFF);
     Serial.printf("Booting time %llu ms\n", millis64() - runtime_timer);
-    sd1.append("启动用时 %llu ms\n", millis64() - runtime_timer);
+    if (!no_sd && have_sd) {
+        sd1.append("启动用时 %llu ms\n", millis64() - runtime_timer);
+    }
     runtime_timer = 0;
 
     if (u8g2) {
@@ -1466,17 +1553,23 @@ void initFmtVars() {
 void formatDataTask(void *pVoid) {
     fd_state = TASK_RUNNING;
     // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "格式化任务已创建\n");
+    if (!no_sd && have_sd) {
+        sd1.append(2, "格式化任务已创建\n");
+    }
     for (auto &i: db->pocsagData) {
         if (i.is_empty)
             continue;
         Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+        if (!no_sd && have_sd) {
+            sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+        }
         db->str = db->str + "  " + i.str;
     }
 
     // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
+    if (!no_sd && have_sd) {
+        sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
+    }
     Serial.printf("decode complete.[%llu]", millis64() - runtime_timer);
     readDataLBJ(db->pocsagData, &db->lbjData);
     sd1.append(2, "LBJ读取完成，用时[%llu]\n", millis64() - runtime_timer);
@@ -1496,10 +1589,12 @@ void formatDataTask(void *pVoid) {
     Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
 
     // sd1.disableSizeCheck();
-    appendDataLog(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
-    appendDataCSV(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
+    if (!no_sd && have_sd) {
+        appendDataLog(db->pocsagData, db->lbjData, rxInfo);
+        Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
+        appendDataCSV(db->pocsagData, db->lbjData, rxInfo);
+        Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
+    }
     // sd1.enableSizeCheck();
 
     printDataTelnet(db->pocsagData, db->lbjData, rxInfo);
@@ -1542,7 +1637,9 @@ void simpleFormatTask() { // only output initially phrased data in case of memor
         if (i.is_empty)
             continue;
         Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        sd1.append("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+        if (!no_sd && have_sd) {
+            sd1.append("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+        }
         // db->str = db->str + "  " + i.str;
         db->str += String(i.addr) + "/" + String(i.func) + ":" + i.str + "\n ";
     }

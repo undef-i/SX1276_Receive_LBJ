@@ -7,13 +7,14 @@
 #include "utilities.h"
 #include <ESP32AnalogRead.h>
 #include "patterns.h"
-
 #ifdef HAS_SDCARD
 
 #include <SD.h>
 #include <FS.h>
 
 #endif
+
+extern bool no_sd;
 
 #ifdef HAS_DISPLAY
 

@@ -12,6 +12,7 @@ ESP32AnalogRead battery;
 float voltage;
 SPIClass SDSPI(HSPI);
 bool have_sd = false;
+bool no_sd = true;  // 设置为true，在编译时禁用SD卡
 
 #ifdef HAS_RTC
 RTC_DS3231 rtc;
@@ -113,42 +114,47 @@ void initBoard() {
 
 
 #ifdef HAS_SDCARD
-    if (u8g2) {
-        u8g2->setFont(FONT_12_GB2312);
-    }
-    pinMode(SDCARD_MISO, INPUT_PULLUP);
-    SDSPI.begin(SDCARD_SCLK, SDCARD_MISO, SDCARD_MOSI, SDCARD_CS);
-//    if (u8g2) {
-//        u8g2->clearBuffer();
-//    }
-    if (!SD.begin(SDCARD_CS, SDSPI, 40000000)) {
-
-        Serial.println("setupSDCard FAIL");
+    if (!no_sd) { // 只有在no_sd为false时才初始化SD卡
         if (u8g2) {
-            do {
-                u8g2->setCursor(0, 62);
-                u8g2->println("SDCard FAILED");
-            } while (u8g2->nextPage());
+            u8g2->setFont(FONT_12_GB2312);
         }
+        pinMode(SDCARD_MISO, INPUT_PULLUP);
+        SDSPI.begin(SDCARD_SCLK, SDCARD_MISO, SDCARD_MOSI, SDCARD_CS);
+    //    if (u8g2) {
+    //        u8g2->clearBuffer();
+    //    }
+        if (!SD.begin(SDCARD_CS, SDSPI, 40000000)) {
 
+            Serial.println("setupSDCard FAIL");
+            if (u8g2) {
+                do {
+                    u8g2->setCursor(0, 62);
+                    u8g2->println("SDCard FAILED");
+                } while (u8g2->nextPage());
+            }
+
+        } else {
+            have_sd = true;
+            uint32_t cardSize = SD.cardSize() / (1024 * 1024);
+            if (u8g2) {
+                do {
+                    u8g2->setCursor(0, 62);
+                    u8g2->print("SDCard:");
+                    u8g2->print(cardSize / 1024.0);
+                    u8g2->println(" GB");
+                } while (u8g2->nextPage());
+            }
+    
+            Serial.print("setupSDCard PASS . SIZE = ");
+            Serial.print(cardSize / 1024.0);
+            Serial.println(" GB");
+        }
+        if (u8g2) {
+            u8g2->sendBuffer();
+        }
     } else {
-        have_sd = true;
-        uint32_t cardSize = SD.cardSize() / (1024 * 1024);
-        if (u8g2) {
-            do {
-                u8g2->setCursor(0, 62);
-                u8g2->print("SDCard:");
-                u8g2->print(cardSize / 1024.0);
-                u8g2->println(" GB");
-            } while (u8g2->nextPage());
-        }
-
-        Serial.print("setupSDCard PASS . SIZE = ");
-        Serial.print(cardSize / 1024.0);
-        Serial.println(" GB");
-    }
-    if (u8g2) {
-        u8g2->sendBuffer();
+        // SD卡禁用，但不显示任何提示信息
+        Serial.println("SD card is disabled (silent mode)");
     }
 //    delay(1500);
 #endif
