@@ -90,7 +90,7 @@ bool deviceConnected = false;
 bool oldDeviceConnected = false;
 uint64_t ble_timer = 0;
 
-// 测试发射功能
+
 #define MENU_TX_TEST 100
 void sendTestData();
 
@@ -313,6 +313,7 @@ void sendTestData() {
     pocdat[0].is_empty = false;
     pocdat[0].len = 15;
     pocdat[1].str = "30479100018530U)*9UU*6 (-(202011719040139058291000";
+                     
     pocdat[1].addr = 1234002;
     pocdat[1].func = 1;
     pocdat[1].is_empty = false;
@@ -1057,12 +1058,12 @@ void handleButtonInput() {
         if (btn_timer == 0) {
             btn_timer = millis64();
         }
-        if (millis64() - btn_timer <= 200 && !btn_pressed) {
+        if (millis64() - btn_timer <= 120 && !btn_pressed) {
             uint16_t btn_level_prev = analogRead(BUTTON_PIN);
             // Serial.printf("[D] GPIO 34-1: %d ADU\n", btn_level);
             uint16_t btn_level = analogRead(BUTTON_PIN);
             // Serial.printf("[D] GPIO 34-2: %d ADU\n", btn_level);
-            if (btn_level >= 1460 && btn_level <= 1490 && abs(btn_level - btn_level_prev) < 10) {
+            if (btn_level >= 1450 && btn_level <= 1500 && abs(btn_level - btn_level_prev) < 15) {
                 btn_pressed = true;
                 oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
