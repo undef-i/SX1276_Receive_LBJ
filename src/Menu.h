@@ -18,7 +18,8 @@ enum menu_pages {
     MENU_TF_CONFIRM,
     MENU_INDEX,
     MENU_INDEX_INPUT,
-    MENU_OLED
+    MENU_OLED,
+    MENU_TX_TEST
 };
 
 class Menu : public ScreenWrapper {
@@ -51,6 +52,7 @@ private:
     void alterDigitIndex(int8_t item, bool plus);
     void drawDigitIndex(int8_t item, bool inv = true, bool send = false);
     void showOLED();
+    void showTxTest();
     bool set_ppm = false;
     bool is_menu = false;
     bool is_msg = false;

@@ -90,7 +90,13 @@ bool deviceConnected = false;
 bool oldDeviceConnected = false;
 uint64_t ble_timer = 0;
 
+// 测试发射功能
+#define MENU_TX_TEST 100
+void sendTestData();
+
 void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest = false);
+void sendTestData();
+int initPager();
 
 inline float actualFreq(float bias) {
     actual_frequency = (float) ((TARGET_FREQ * bias) / 1e6 + TARGET_FREQ);
@@ -292,6 +298,67 @@ void LBJTEST() {
     // rxInfo.rssi = 0;
     // rxInfo.fer = 0;
     // delete db;
+}
+
+// 发送POCSAG测试数据
+void sendTestData() {
+    // 禁用接收模式
+    radio.standby();
+    
+    // 创建测试数据
+    PagerClient::pocsag_data pocdat[16];
+    pocdat[0].str = "37012";
+    pocdat[0].addr = 1234000;
+    pocdat[0].func = 1;
+    pocdat[0].is_empty = false;
+    pocdat[0].len = 15;
+    pocdat[1].str = "30479100018530U)*9UU*6 (-(202011719040139058291000";
+    pocdat[1].addr = 1234002;
+    pocdat[1].func = 1;
+    pocdat[1].is_empty = false;
+    pocdat[1].len = 0;
+    
+    // 设置FSK发送模式
+    Serial.println("[TEST] 切换到FSK发送模式");
+    int16_t state = radio.beginFSK(actualFreq(ppm), 4.8, 5.0, 12.5);
+    if (state != RADIOLIB_ERR_NONE) {
+        Serial.printf("[TEST] 切换失败, 错误代码: %d\n", state);
+        return;
+    }
+    
+    // 创建POCSAG客户端用于发送
+    PagerClient pagerTx(&radio);
+    
+    // 配置POCSAG
+    state = pagerTx.begin(actualFreq(ppm), 1200);
+    if (state != RADIOLIB_ERR_NONE) {
+        Serial.printf("[TEST] POCSAG初始化失败, 错误代码: %d\n", state);
+        return;
+    }
+    
+    // 发送数据
+    Serial.println("[TEST] 发送测试数据...");
+    state = pagerTx.transmit(pocdat[0].str, pocdat[0].addr, pocdat[0].func);
+    if (state != RADIOLIB_ERR_NONE) {
+        Serial.printf("[TEST] 发送失败, 错误代码: %d\n", state);
+    } else {
+        Serial.println("[TEST] 发送成功!");
+    }
+    
+    // 等待第一条消息发送完成
+    delay(500);
+    
+    // 发送第二条消息
+    state = pagerTx.transmit(pocdat[1].str, pocdat[1].addr, pocdat[1].func);
+    if (state != RADIOLIB_ERR_NONE) {
+        Serial.printf("[TEST] 发送失败, 错误代码: %d\n", state);
+    } else {
+        Serial.println("[TEST] 发送成功!");
+    }
+    
+    // 恢复到接收模式
+    Serial.println("[TEST] 恢复接收模式");
+    initPager();
 }
 
 int initPager() {// initialize SX1276 with default settings

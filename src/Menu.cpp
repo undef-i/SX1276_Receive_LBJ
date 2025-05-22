@@ -246,7 +246,20 @@ void Menu::handleKey(bool up) {
             }
             showOLED();
             highlightItem(selected_item);
-            // more coming...
+            break;
+        case MENU_TX_TEST:
+            if (up)
+                selected_item--;
+            else
+                selected_item++;
+            if (selected_item < 0) {
+                selected_item = 1;
+            }
+            if (selected_item > 1) {
+                selected_item = 0;
+            }
+            showTxTest();
+            highlightItem(selected_item);
             break;
     }
 }
@@ -274,7 +287,7 @@ void Menu::showSettings(int16_t page) {
             break;
         }
         case -2: {
-            items[0] = "预留条目";
+            items[0] = "发射测试";
             items[1] = "显示设置";
             items[2] = "RTC信息";
             items[3] = "系统信息";
@@ -339,6 +352,12 @@ void Menu::acknowledge() {
                 }
             } else if (sub_page == -2) {
                 switch (selected_item) {
+                    case 0:
+                        menu_page = MENU_TX_TEST;
+                        showTxTest();
+                        selected_item = 0;
+                        highlightItem(selected_item);
+                        break;
                     case 1:
                         menu_page = MENU_OLED;
                         showOLED();
@@ -503,6 +522,25 @@ void Menu::acknowledge() {
                     break;
             }
             break;
+        case MENU_TX_TEST:
+            switch (selected_item) {
+                case 0:
+                    // 发送测试数据
+                    showMessage("发射测试", "正在发送测试数据...");
+                    // 调用外部函数发送测试数据
+                    extern void sendTestData();
+                    sendTestData();
+                    showMessage("发射测试", "测试数据发送完成！");
+                    delay(1000);
+                    showTxTest();
+                    highlightItem(selected_item);
+                    break;
+                case 1:
+                    // 返回主菜单
+                    showLast();
+                    break;
+            }
+            break;
         default:
             return;
     }
@@ -561,6 +599,13 @@ void Menu::showLast() {
             showIndexFile();
             highlightIndex(selected_item);
             menu_page = MENU_INDEX;
+            break;
+        case MENU_TX_TEST:
+            sub_page = -2;
+            showSettings(sub_page);
+            selected_item = 0;
+            highlightItem(selected_item);
+            menu_page = MENU_SETTINGS;
             break;
         case MENU_OLED:
             sub_page = -2;
@@ -1000,4 +1045,15 @@ void Menu::showOLED() {
     display->drawUTF8(0, 38, items[1].c_str());
 }
 
+void Menu::showTxTest() {
+    clearAll();
+    display->setFont(FONT_12_GB2312);
+    display->drawUTF8(0, 12, "发射测试");
+    display->drawHLine(0, 14, 128);
+
+    items[0] = "发送测试数据";
+    display->drawUTF8(0, 26, items[0].c_str());
+    items[1] = "返回菜单";
+    display->drawUTF8(0, 38, items[1].c_str());
+}
 
