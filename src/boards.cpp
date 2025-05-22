@@ -126,14 +126,8 @@ void initBoard() {
 //        u8g2->clearBuffer();
 //    }
     if (!SD.begin(SDCARD_CS, SDSPI, 40000000)) {
-
+        // SD卡初始化失败，但不在屏幕上显示错误信息
         Serial.println("setupSDCard FAIL");
-        if (u8g2) {
-            do {
-                u8g2->setCursor(0, 62);
-                u8g2->println("SD卡初始化失败");
-            } while (u8g2->nextPage());
-        }
 
     } else {
         have_sd = true;

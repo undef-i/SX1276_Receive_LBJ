@@ -219,7 +219,7 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->setCursor(0, 19);
     // sprintf(buffer, "车:%s%s", l.lbj_class, l.train);
     display->printf("车:");
-    display->setCursor(display->getCursorX() + 1, display->getCursorY());
+    display->setCursor(display->getCursorX() + 2, display->getCursorY());
     display->setFont(font_12_alphanum);
     // for (int i = 0, c = 0; i < 8; i++) {
     //     if (i == 7) {
@@ -248,8 +248,17 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
         buffer[c] = l.train[i];
         ++c;
     }
+    // 处理车次类型，去除前面的空格
+    char class_buffer[3] = {0};
+    for (int i = 0, c = 0; i < 2; i++) {
+        if (l.lbj_class[i] == ' ')
+            continue;
+        class_buffer[c] = l.lbj_class[i];
+        ++c;
+    }
+    
     uint16_t cx_prev = display->getCursorX();
-    display->printf("%s", l.lbj_class);
+    display->printf("%s", class_buffer);
     directDrawEpi(getErrorCount(3, l.epi), cx_prev, l.lbj_class, 0, 1);
     // drawEpi(l.type, 3, l.epi, cx_prev);
     cx_prev = display->getCursorX();

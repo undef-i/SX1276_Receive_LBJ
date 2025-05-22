@@ -840,7 +840,17 @@ void printDataSerial(PagerClient::pocsag_data *p, const struct lbj_data &l, cons
                 Serial.print("[LBJ] 方向: 下行     ");
             else
                 Serial.printf("[LBJ] 方向: %3d     ", l.direction);
-            Serial.printf("车次: %s%s   速度: %s KM/H  公里标: %s KM \n", l.lbj_class, l.train, l.speed, l.position);
+            
+            // 处理车次类型，去除前面的空格
+            char class_buffer[3] = {0};
+            for (int i = 0, c = 0; i < 2; i++) {
+                if (l.lbj_class[i] == ' ')
+                    continue;
+                class_buffer[c] = l.lbj_class[i];
+                ++c;
+            }
+            
+            Serial.printf("车次: %s%s   速度: %s KM/H  公里标: %s KM \n", class_buffer, l.train, l.speed, l.position);
             Serial.printf("[LBJ] 线路: %s 车号: %s  ", l.route_utf8, l.loco);
             if (l.pos_lat_deg[1] && l.pos_lat_min[1])
                 Serial.printf("位置: %s°%2s′ ", l.pos_lat_deg, l.pos_lat_min);
@@ -918,7 +928,17 @@ void appendDataLog(PagerClient::pocsag_data *p, const struct lbj_data &l, const 
                 sd1.appendBuffer("[LBJ] 方向: 下行     ");
             else
                 sd1.appendBuffer("[LBJ] 方向: %3d     ", l.direction);
-            sd1.appendBuffer("车次: %s%s   速度: %s KM/H  公里标: %s KM \n", l.lbj_class, l.train, l.speed,
+            
+            // 处理车次类型，去除前面的空格
+            char class_buffer[3] = {0};
+            for (int i = 0, c = 0; i < 2; i++) {
+                if (l.lbj_class[i] == ' ')
+                    continue;
+                class_buffer[c] = l.lbj_class[i];
+                ++c;
+            }
+            
+            sd1.appendBuffer("车次: %s%s   速度: %s KM/H  公里标: %s KM \n", class_buffer, l.train, l.speed,
                              l.position);
             sd1.appendBuffer("[LBJ] 线路: %s 车号: %s  ", l.route_utf8, l.loco);
             if (l.pos_lat_deg[1] && l.pos_lat_min[1])
@@ -1001,7 +1021,17 @@ void printDataTelnet(PagerClient::pocsag_data *p, const struct lbj_data &l, cons
                 telPrintf(true, "[LBJ] 方向: 下行     ");
             else
                 telPrintf(true, "[LBJ] 方向: %4d     ", l.direction);
-            telPrintf(true, "车次: %s%s   速度: %s KM/H  公里标: %s KM \n", l.lbj_class, l.train, l.speed, l.position);
+            
+            // 处理车次类型，去除前面的空格
+            char class_buffer[3] = {0};
+            for (int i = 0, c = 0; i < 2; i++) {
+                if (l.lbj_class[i] == ' ')
+                    continue;
+                class_buffer[c] = l.lbj_class[i];
+                ++c;
+            }
+            
+            telPrintf(true, "车次: %s%s   速度: %s KM/H  公里标: %s KM \n", class_buffer, l.train, l.speed, l.position);
             telPrintf(true, "[LBJ] 线路: %s 车号: %s  ", l.route_utf8, l.loco);
             if (l.pos_lat_deg[1] && l.pos_lat_min[1])
                 telPrintf(true, "位置: %s°%2s′ ", l.pos_lat_deg, l.pos_lat_min);
@@ -1058,7 +1088,17 @@ void appendDataCSV(PagerClient::pocsag_data *p, const struct lbj_data &l, const 
                 sd1.appendBufferCSV(",下行,");
             else
                 sd1.appendBufferCSV(",%d,", l.direction);
-            sd1.appendBufferCSV("%s,%s,%s,%s,%s,%s,", l.lbj_class, l.train, l.speed, l.position, l.loco,
+            
+            // 处理车次类型，去除前面的空格
+            char class_buffer[3] = {0};
+            for (int i = 0, c = 0; i < 2; i++) {
+                if (l.lbj_class[i] == ' ')
+                    continue;
+                class_buffer[c] = l.lbj_class[i];
+                ++c;
+            }
+            
+            sd1.appendBufferCSV("%s,%s,%s,%s,%s,%s,", class_buffer, l.train, l.speed, l.position, l.loco,
                                 l.route_utf8);
             if (l.pos_lat_deg[1] && l.pos_lat_min[1])
                 sd1.appendBufferCSV("%s°%2s′,", l.pos_lat_deg, l.pos_lat_min);

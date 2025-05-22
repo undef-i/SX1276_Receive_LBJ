@@ -30,7 +30,8 @@ Share IIC Bus with on board SSD1306 OLED.
 #define I2C_SCL                     22
 ```
 Keeps time while power off. If not used, the time will be acquired from NTP server every time after reboot.
-If connected uncomment the following line in [utilities.h](src/utilities.h) while building.
+If connected uncomment the f
+ollowing line in [utilities.h](src/utilities.h) while building.
 ```c++
 #define HAS_RTC // soldered an external DS3231 module.
 ```

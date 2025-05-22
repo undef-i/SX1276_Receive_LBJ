@@ -312,9 +312,9 @@ void sendTestData() {
     pocdat[0].func = 1;
     pocdat[0].is_empty = false;
     pocdat[0].len = 15;
-    pocdat[1].str = "30479100018530U)*9UU*6 (-(202011719040139058291000";
+    pocdat[1].str = "43161  56    6220202390853430 U*)U0-7 (-(202011654545936364942000";
                      
-    pocdat[1].addr = 1234002;
+    pocdat[1].addr = 1234000;
     pocdat[1].func = 1;
     pocdat[1].is_empty = false;
     pocdat[1].len = 0;
@@ -337,17 +337,7 @@ void sendTestData() {
         return;
     }
     
-    // 发送数据
-    Serial.println("[TEST] 发送测试数据...");
-    state = pagerTx.transmit(pocdat[0].str, pocdat[0].addr, pocdat[0].func);
-    if (state != RADIOLIB_ERR_NONE) {
-        Serial.printf("[TEST] 发送失败, 错误代码: %d\n", state);
-    } else {
-        Serial.println("[TEST] 发送成功!");
-    }
-    
-    // 等待第一条消息发送完成
-    delay(500);
+
     
     // 发送第二条消息
     state = pagerTx.transmit(pocdat[1].str, pocdat[1].addr, pocdat[1].func);
@@ -501,10 +491,19 @@ void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, boo
             position_info = String(l.pos_lat) + " " + String(l.pos_lon);
         }
         
+        // 处理车次类型，去除前面的空格
+        char class_buffer[3] = {0};
+        for (int i = 0, c = 0; i < 2; i++) {
+            if (l.lbj_class[i] == ' ')
+                continue;
+            class_buffer[c] = l.lbj_class[i];
+            ++c;
+        }
+        
         snprintf(buffer, sizeof(buffer),
             "{\"train\":\"%s\",\"dir\":%d,\"speed\":\"%s\",\"pos\":\"%s\",\"time\":\"%s\",\"loco\":\"%s\",\"loco_type\":\"%s\",\"lbj_class\":\"%s\",\"route\":\"%s\",\"position_info\":\"%s\",\"rssi\":%.2f,\"test_flag\":%s}",
             l.train, l.direction, l.speed, l.position, l.time, l.loco,
-            l.loco_type.c_str(), l.lbj_class, l.route_utf8,
+            l.loco_type.c_str(), class_buffer, l.route_utf8,
             position_info.c_str(),
             r.rssi, isTest ? "true" : "false");
         
