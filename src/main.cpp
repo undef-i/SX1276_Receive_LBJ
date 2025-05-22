@@ -32,6 +32,11 @@
 // include libraries
 #include <RadioLib.h>
 #include "coredump.h"
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <BLECharacteristic.h>
 
 // #include <esp_task_wdt.h>
 // #include "ScreenWrapper.h"
@@ -46,6 +51,10 @@
 #define FD_TASK_TIMEOUT 750 // ms
 #define FD_TASK_ATTEMPTS 3
 #define LED_ON_TIME 200 // ms
+
+#define SERVICE_UUID           "0000FFE0-0000-1000-8000-00805F9B34FB"
+#define CHARACTERISTIC_UUID_TX "0000FFE1-0000-1000-8000-00805F9B34FB"
+#define BLE_DEVICE_NAME        "LBJReceiver"
 //region Variables
 SX1276 radio = new Module(RADIO_CS_PIN, RADIO_DIO0_PIN, RADIO_RST_PIN, RADIO_DIO1_PIN);
 // receiving packets requires connection
@@ -75,6 +84,14 @@ uint32_t car_count = 0;
 uint32_t ip_last = 0;
 float ppm = INITIAL_PPM;
 
+BLEServer *pServer = nullptr;
+BLECharacteristic *pTxCharacteristic = nullptr;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+uint64_t ble_timer = 0;
+
+void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest = false);
+
 inline float actualFreq(float bias) {
     actual_frequency = (float) ((TARGET_FREQ * bias) / 1e6 + TARGET_FREQ);
     return actual_frequency;
@@ -94,6 +111,7 @@ bool have_cd = false;
 bool btn_pressed = false;
 bool telnet_online = false;
 bool first_rx = false;
+bool ble_enabled = true;
 SD_LOG sd1;
 aPreferences flash;
 Menu oled;
@@ -109,6 +127,32 @@ void formatDataTask(void *pVoid);
 void simpleFormatTask();
 
 void initFmtVars();
+
+class SafeServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) override {
+      deviceConnected = true;
+      Serial.println("[BLE] Device is connected");
+      ble_timer = millis64();
+    }
+    
+    void onDisconnect(BLEServer* pServer) override {
+      deviceConnected = false;
+      Serial.println("[BLE] Device is disconnected");
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) override {
+        std::string rxValue = pCharacteristic->getValue();
+        if (rxValue.length() > 0) {
+            Serial.print("接收到数据: ");
+            for (int i = 0; i < rxValue.length(); i++) {
+                Serial.print(rxValue[i]);
+            }
+            Serial.println();
+        }
+    }
+};
 
 void handleSerialInput();
 
@@ -281,6 +325,156 @@ int initPager() {// initialize SX1276 with default settings
 
     return (state);
 }
+
+void initBLE() {
+    Serial.println("[BLE] Initializing BLE...");
+    
+    if(BLEDevice::getInitialized()) {
+        Serial.println("[BLE] Warning BLE already initialized, deinitializing first");
+        BLEDevice::deinit(true);
+        delay(500);
+    }
+    
+    if (pServer != nullptr) {
+        pServer = nullptr;
+    }
+    if (pTxCharacteristic != nullptr) {
+        pTxCharacteristic = nullptr;
+    }
+    
+    BLEDevice::init(BLE_DEVICE_NAME);
+    Serial.println("[BLE] Initialization complete");
+    
+    pServer = BLEDevice::createServer();
+    if (pServer == nullptr) {
+        Serial.println("[BLE] Error unable to create server");
+        return;
+    }
+    
+    pServer->setCallbacks(new SafeServerCallbacks());
+    Serial.println("[BLE] Server creation complete");
+    
+    BLEService *pService = pServer->createService(BLEUUID(SERVICE_UUID));
+    Serial.println("[BLE] Service creation complete");
+    
+    pTxCharacteristic = pService->createCharacteristic(
+                          CHARACTERISTIC_UUID_TX,
+                          BLECharacteristic::PROPERTY_READ |
+                          BLECharacteristic::PROPERTY_WRITE |
+                          BLECharacteristic::PROPERTY_NOTIFY
+                        );
+    
+    if (pTxCharacteristic == nullptr) {
+        Serial.println("[BLE] Error unable to create TX characteristic");
+        return;
+    }
+    
+    BLE2902* p2902Descriptor = new BLE2902();
+    if (p2902Descriptor != nullptr) {
+        p2902Descriptor->setNotifications(true);
+        pTxCharacteristic->addDescriptor(p2902Descriptor);
+    } else {
+        Serial.println("[BLE] Warning unable to create BLE2902 descriptor");
+    }
+    
+    try {
+        pTxCharacteristic->setValue("LBJ Train Warning Ready");
+        Serial.println("[BLE] TX characteristic value set to initial message");
+    } catch (...) {
+        Serial.println("[BLE] Error setting TX characteristic value");
+    }
+    
+    pService->start();
+    Serial.println("[BLE] Service started");
+    
+    BLEAdvertising *pAdvertising = pServer->getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMinPreferred(0x12);
+    
+    pAdvertising->start();
+    Serial.println("[BLE] Advertising started");
+    Serial.printf("[BLE] Device name: %s\n", BLE_DEVICE_NAME);
+    Serial.printf("[BLE] Service UUID: %s\n", SERVICE_UUID);
+    Serial.printf("[BLE] TX characteristic UUID: %s\n", CHARACTERISTIC_UUID_TX);
+    Serial.println("[BLE] Server ready awaiting client connection");
+}
+
+void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest) {
+    static char buffer[512];
+    
+    if (!ble_enabled) {
+        Serial.println("[BLE] Warning trying to send data while BLE is disabled");
+        return;
+    }
+    
+    if (pTxCharacteristic == nullptr) {
+        Serial.println("[BLE] Error TX characteristic is null cannot send data");
+        return;
+    }
+    
+    if (!deviceConnected) {
+        Serial.println("[BLE] Info no device connected not sending data");
+        return;
+    }
+    
+    try {
+        memset(buffer, 0, sizeof(buffer));
+
+        Serial.printf("DEBUG JSON: train='%s', route='%s', loco_type='%s'\n",
+                    l.train, l.route_utf8, l.loco_type.c_str());
+        
+        String position_info = "";
+        if (l.pos_lat_deg[0] && l.pos_lat_min[0] && l.pos_lon_deg[0] && l.pos_lon_min[0]) {
+            position_info = String(l.pos_lat_deg) + "°" + String(l.pos_lat_min) + "′ "
+                          + String(l.pos_lon_deg) + "°" + String(l.pos_lon_min) + "′";
+        } else if (l.pos_lat[0] && l.pos_lon[0]) {
+            position_info = String(l.pos_lat) + " " + String(l.pos_lon);
+        }
+        
+        snprintf(buffer, sizeof(buffer),
+            "{\"train\":\"%s\",\"dir\":%d,\"speed\":\"%s\",\"pos\":\"%s\",\"time\":\"%s\",\"loco\":\"%s\",\"loco_type\":\"%s\",\"lbj_class\":\"%s\",\"route\":\"%s\",\"position_info\":\"%s\",\"rssi\":%.2f,\"test_flag\":%s}",
+            l.train, l.direction, l.speed, l.position, l.time, l.loco,
+            l.loco_type.c_str(), l.lbj_class, l.route_utf8,
+            position_info.c_str(),
+            r.rssi, isTest ? "true" : "false");
+        
+        if (deviceConnected && pTxCharacteristic != nullptr) {
+            pTxCharacteristic->setValue(buffer);
+            pTxCharacteristic->notify();
+            Serial.println("[BLE] Data sent");
+        }
+    } catch (const std::exception& e) {
+        Serial.printf("[BLE] Data send exception: %s\n", e.what());
+    } catch (...) {
+        Serial.println("[BLE] Unknown exception occurred while sending data");
+    }
+}
+
+void handleBleConnections() {
+    if (pServer == nullptr) {
+        return;
+    }
+    
+    if (!deviceConnected && oldDeviceConnected) {
+        delay(500);
+        try {
+            if (pServer != nullptr) {
+                pServer->startAdvertising();
+                Serial.println("[BLE] BLE resumed broadcasting");
+            }
+        } catch (...) {
+            Serial.println("[BLE] Error occurred when restarting broadcasting");
+        }
+        oldDeviceConnected = deviceConnected;
+    }
+    
+    if (deviceConnected && !oldDeviceConnected) {
+        oldDeviceConnected = deviceConnected;
+        Serial.println("[BLE] BLE connection status has been updated");
+    }
+}
 //endregion
 
 // SETUP
@@ -388,6 +582,14 @@ void setup() {
     oled.showListening();
 
     Serial.printf("Mem left: %d Bytes\n", esp_get_free_heap_size());
+
+    // 初始化蓝牙
+    if (ble_enabled) {
+        initBLE();
+        Serial.println("[BLE] Bluetooth initialization complete");
+    } else {
+        Serial.println("[BLE] Bluetooth is disabled in settings");
+    }
 
     // test stuff
     // LBJTEST();
@@ -561,11 +763,22 @@ void loop() {
         led_timer = 0;
         changeCpuFreq(240);
     }
+handleSerialInput();
+checkNetwork();
+handleTelnet();
+handleTelnetCall();
 
-    handleSerialInput();
-    checkNetwork();
-    handleTelnet();
-    handleTelnetCall();
+if (ble_enabled) {
+    handleBleConnections();
+    
+    if (deviceConnected) {
+        if (ble_timer == 0 || millis64() - ble_timer > 30000) {
+            Serial.println("[BLE] Connection active waiting for actual data");
+            ble_timer = millis64();
+        }
+    }
+}
+
 
     if (millis64() > 60000 && format_task_timer == 0 &&
         !exec_init_f80) // lower down frequency 60 sec after startup and idle.
@@ -1072,6 +1285,21 @@ void handleSerialInput() {
             xTaskCreatePinnedToCore(getCoreFreq, "get_freq", 2048, nullptr,
                                     1, nullptr, 0);
             Serial.printf("Core %d Frequency %d MHz\n", xPortGetCoreID(), ets_get_cpu_frequency());
+        } else if (in == "ble on") {
+            ble_enabled = true;
+            if (pServer == nullptr) {
+                initBLE();
+                Serial.println("$ BLE enabled and initialized");
+            } else {
+                Serial.println("$ BLE enabled");
+            }
+        } else if (in == "ble off") {
+            ble_enabled = false;
+            Serial.println("$ BLE disabled");
+        } else if (in == "ble status") {
+            Serial.printf("$ BLE Status: %s, Connection: %s\n",
+                ble_enabled ? "enabled" : "disabled",
+                deviceConnected ? "Connected" : "Disconnected");
         }
             // else if (in == "flash read") {
             //     flash.readFile("/CACHE");
@@ -1189,6 +1417,15 @@ void formatDataTask(void *pVoid) {
 
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
     sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
+    
+    if (ble_enabled && db != nullptr) {
+        try {
+            sendTrainDataOverBLE(db->lbjData, rxInfo, false);
+            Serial.println("[BLE] Data sent over BLE");
+        } catch (...) {
+            Serial.println("[BLE] Error occurred while sending data over BLE");
+        }
+    }
     Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
 
     flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
