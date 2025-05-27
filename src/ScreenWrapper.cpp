@@ -436,42 +436,49 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     display->printf("K");
     display->setFont(FONT_12_GB2312);
     // line 3
-    // sprintf(buffer, "号:%s", l.loco);
+    // 显示机车型号（左对齐）
     display->setCursor(0, 43);
+    display->setFont(FONT_12_GB2312);
+    if (l.loco_type.length()) {
+        display->drawUTF8(0, 43, l.loco_type.c_str());
+    }
+
+    // 显示机车号（右对齐）
     display->setFont(font_12_alphanum);
     if (String(l.loco) == "<NUL>") {
+        int strWidth = display->getStrWidth(l.loco);
+        display->setCursor(128 - strWidth, 43);
         display->printf("%s", l.loco);
     } else {
-        cx_prev = display->getCursorX();
-        display->printf("%c", l.loco[0]);
-        // drawEpi(l.type, 3, l.epi, cx_prev);
-        directDrawEpi(getErrorCount(3, l.epi), cx_prev, String(l.loco[0]), 0, 1);
-        cx_prev = display->getCursorX();
-        display->printf("%s", String(l.loco).substring(1, 6).c_str());
-        // drawEpi(l.type, 4, l.epi, cx_prev);
-        directDrawEpi(getErrorCount(4, l.epi), cx_prev, String(l.loco).substring(1, 6), 0, 1);
-        cx_prev = display->getCursorX();
+        String locoStr;
         if (l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
             if (l.info2_hex[13] == '1')
-                sprintf(buffer, "%sA", String(l.loco).substring(6).c_str());
+                locoStr = String(l.loco) + "A";
             else if (l.info2_hex[13] == '2')
-                sprintf(buffer, "%sB", String(l.loco).substring(6).c_str());
+                locoStr = String(l.loco) + "B";
             else
-                sprintf(buffer, "%s", String(l.loco).substring(6).c_str());
+                locoStr = String(l.loco);
         } else {
-            sprintf(buffer, "%s", String(l.loco).substring(6).c_str());
+            locoStr = String(l.loco);
         }
-        display->printf("%s", buffer);
-        // drawEpi(l.type, 5, l.epi, cx_prev);
-        directDrawEpi(getErrorCount(5, l.epi), cx_prev, buffer, 0, 1);
-
-    }
-    display->setFont(FONT_12_GB2312);
-    // display->drawUTF8(0, 43, buffer);
-    if (l.loco_type.length()) {
-        // 计算机车类型字符串宽度，实现右对齐
-        int strWidth = display->getUTF8Width(l.loco_type.c_str());
-        display->drawUTF8(128 - strWidth, 43, l.loco_type.c_str());
+        
+        int strWidth = display->getStrWidth(locoStr.c_str());
+        display->setCursor(128 - strWidth, 43);
+        
+        // 显示第一个字符
+        cx_prev = display->getCursorX();
+        display->printf("%c", locoStr[0]);
+        directDrawEpi(getErrorCount(3, l.epi), cx_prev, String(locoStr[0]), 0, 1);
+        
+        // 显示中间部分
+        cx_prev = display->getCursorX();
+        display->printf("%s", locoStr.substring(1, 6).c_str());
+        directDrawEpi(getErrorCount(4, l.epi), cx_prev, locoStr.substring(1, 6), 0, 1);
+        
+        // 显示剩余部分
+        cx_prev = display->getCursorX();
+        display->printf("%s", locoStr.substring(6).c_str());
+        directDrawEpi(getErrorCount(5, l.epi), cx_prev, locoStr.substring(6), 0, 1);
     }
     // line 4
     String pos;
@@ -577,13 +584,7 @@ void ScreenWrapper::showLBJ(const struct lbj_data &l, const struct rx_info &r, c
     // show msg rx time
     display->setDrawColor(0);
     display->setFont(u8g2_font_squeezed_b7_tr);
-    display->drawBox(0, 0, 97, 8);
     display->setDrawColor(1);
-    if (std::stoi(time_str.substring(0, 4).c_str()) < 2016)
-        display->drawStr(0, 7, "NO SNTP");
-    else {
-        display->drawStr(0, 7, (time_str.substring(0, 16)).c_str());
-    }
 
     char buffer[32];
     // show temp
