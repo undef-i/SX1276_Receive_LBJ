@@ -17,19 +17,18 @@ void ScreenWrapper::updateInfo() {
         return;
 
     char buffer[32];
-    // update top
+    // update top - battery percentage
     if (update_top) {
         display->setDrawColor(0);
         display->setFont(u8g2_font_squeezed_b7_tr);
         display->drawBox(0, 0, 98, 8);
         display->setDrawColor(1);
-        if (!getLocalTime(&time_info, 0))
-            display->drawStr(0, 7, "NO SNTP");
-        else {
-            sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
-                    time_info.tm_hour, time_info.tm_min);
-            display->drawStr(0, 7, buffer);
-        }
+        voltage = battery.readVoltage() * 2;
+        int batteryPercentage = ((voltage - 3.15) / (4.2 - 3.15)) * 100;
+        if (batteryPercentage > 100) batteryPercentage = 100;
+        if (batteryPercentage < 0) batteryPercentage = 0;
+        sprintf(buffer, "%d%%", batteryPercentage);
+        display->drawStr(0, 7, buffer);
 #ifdef HAS_RTC
         if (have_rtc) {
             sprintf(buffer, "%dC", (int) rtc.getTemperature());
@@ -41,34 +40,17 @@ void ScreenWrapper::updateInfo() {
         display->setDrawColor(0);
         display->drawBox(0, 56, 128, 8);
         display->setDrawColor(1);
-        if (!no_wifi) {
-            String ipa = WiFi.localIP().toString();
-            display->drawStr(0, 64, ipa.c_str());
-        } else
-            display->drawStr(0, 64, "WIFI OFF");
+        display->drawStr(0, 64, BLE_DEVICE_NAME);
     } else {
         display->setDrawColor(0);
         display->drawBox(73, 56, 56, 8);
         display->setDrawColor(1);
     }
-    sprintf(buffer, "%.1f", getBias(actual_frequency));
+    sprintf(buffer, "%.1f", getBias(actual_frequency));  // PPM偏差值
     display->drawStr(73, 64, buffer);
-    if (sd1.status() && WiFiClass::status() == WL_CONNECTED)
-        display->drawStr(89, 64, "D");
-    else if (sd1.status())
-        display->drawStr(89, 64, "L");
-    else if (WiFiClass::status() == WL_CONNECTED)
-        display->drawStr(89, 64, "N");
-    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
-    display->drawStr(96, 64, buffer);
-    voltage = battery.readVoltage() * 2;
-    sprintf(buffer, "%1.2f", voltage); // todo: Implement average voltage reading.
-    if (voltage < 3.15 && !low_volt_warned) {
-        Serial.printf("Warning! Low Voltage detected, %1.2fV\n", voltage);
-        sd1.append("低压警告，电池电压%1.2fV\n", voltage);
-        low_volt_warned = true;
-    }
-    display->drawStr(108, 64, buffer);
+    sprintf(buffer, "%dMHz", ets_get_cpu_frequency());  // CPU频率完整显示
+    int strWidth = display->getStrWidth(buffer);
+    display->drawStr(128 - strWidth, 64, buffer);  // 右对齐显示
     display->sendBuffer();
 }
 
@@ -78,27 +60,16 @@ void ScreenWrapper::showInitComp() {
     display->clearBuffer();
     display->setFont(u8g2_font_squeezed_b7_tr);
     // bottom (0,56,128,8)
-    String ipa = WiFi.localIP().toString();
-    display->drawStr(0, 64, ipa.c_str());
-    if (have_sd && WiFiClass::status() == WL_CONNECTED)
-        display->drawStr(89, 64, "D");
-    else if (have_sd)
-        display->drawStr(89, 64, "L");
-    else if (WiFiClass::status() == WL_CONNECTED)
-        display->drawStr(89, 64, "N");
+    display->drawStr(0, 64, BLE_DEVICE_NAME);
     char buffer[32];
     sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
     display->drawStr(96, 64, buffer);
     sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
     display->drawStr(108, 64, buffer);
     // top (0,0,128,8)
-    if (!getLocalTime(&time_info, 0))
-        display->drawStr(0, 7, "NO SNTP");
-    else {
-        sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
-                time_info.tm_hour, time_info.tm_min);
-        display->drawStr(0, 7, buffer);
-    }
+    sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
+            time_info.tm_hour, time_info.tm_min);
+    display->drawStr(0, 7, buffer);
     display->sendBuffer();
 }
 
@@ -464,8 +435,6 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     // line 3
     // sprintf(buffer, "号:%s", l.loco);
     display->setCursor(0, 43);
-    display->printf("号:");
-    display->setCursor(display->getCursorX() + 1, display->getCursorY());
     display->setFont(font_12_alphanum);
     if (String(l.loco) == "<NUL>") {
         display->printf("%s", l.loco);
@@ -496,8 +465,11 @@ void ScreenWrapper::showLBJ1(const struct lbj_data &l, const struct rx_info &r) 
     }
     display->setFont(FONT_12_GB2312);
     // display->drawUTF8(0, 43, buffer);
-    if (l.loco_type.length())
-        display->drawUTF8(72, 43, l.loco_type.c_str());
+    if (l.loco_type.length()) {
+        // 计算机车类型字符串宽度，实现右对齐
+        int strWidth = display->getUTF8Width(l.loco_type.c_str());
+        display->drawUTF8(128 - strWidth, 43, l.loco_type.c_str());
+    }
     // line 4
     String pos;
     display->setCursor(0, 54);

@@ -54,7 +54,6 @@
 
 #define SERVICE_UUID           "0000FFE0-0000-1000-8000-00805F9B34FB"
 #define CHARACTERISTIC_UUID_TX "0000FFE1-0000-1000-8000-00805F9B34FB"
-#define BLE_DEVICE_NAME        "LBJReceiver"
 //region Variables
 SX1276 radio = new Module(RADIO_CS_PIN, RADIO_DIO0_PIN, RADIO_RST_PIN, RADIO_DIO1_PIN);
 // receiving packets requires connection
@@ -390,14 +389,6 @@ void initBLE() {
     if(BLEDevice::getInitialized()) {
         Serial.println("[BLE] Warning BLE already initialized, deinitializing first");
         BLEDevice::deinit(true);
-        delay(500);
-    }
-    
-    if (pServer != nullptr) {
-        pServer = nullptr;
-    }
-    if (pTxCharacteristic != nullptr) {
-        pTxCharacteristic = nullptr;
     }
     
     BLEDevice::init(BLE_DEVICE_NAME);
@@ -448,9 +439,12 @@ void initBLE() {
     BLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferred(0x06);
-    pAdvertising->setMinPreferred(0x12);
+    pAdvertising->setMinPreferred(0x06);  // 设置连接间隔最小值
+    pAdvertising->setMaxPreferred(0x12);  // 设置连接间隔最大值
+    pAdvertising->setMinInterval(0x20);   // 设置广播最小间隔
+    pAdvertising->setMaxInterval(0x40);   // 设置广播最大间隔
     
+    // 启用广播
     pAdvertising->start();
     Serial.println("[BLE] Advertising started");
     Serial.printf("[BLE] Device name: %s\n", BLE_DEVICE_NAME);
@@ -524,43 +518,41 @@ void handleBleConnections() {
         return;
     }
     
+    // 处理断开连接的情况
+    // 处理断开连接的情况
     if (!deviceConnected && oldDeviceConnected) {
-        delay(500);
         try {
             if (pServer != nullptr) {
+                if (pTxCharacteristic != nullptr) {
+                    pTxCharacteristic->setValue(""); // 重置特征值
+                }
                 pServer->startAdvertising();
-                Serial.println("[BLE] BLE resumed broadcasting");
+                Serial.println("[BLE] Restarting advertising");
             }
         } catch (...) {
-            Serial.println("[BLE] Error occurred when restarting broadcasting");
+            Serial.println("[BLE] Error occurred when restarting advertising");
         }
         oldDeviceConnected = deviceConnected;
     }
     
+    // 处理新连接的情况
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
-        Serial.println("[BLE] BLE connection status has been updated");
+        if (pTxCharacteristic != nullptr) {
+            pTxCharacteristic->setValue("LBJ Train Warning Ready");
+            pTxCharacteristic->notify();
+        }
+        Serial.println("[BLE] New device connected");
     }
 }
 //endregion
 
 // SETUP
 void setup() {
-    esp_core_dump_init();
     runtime_timer = millis64();
-    esp_reset_reason_t reset_reason = esp_reset_reason();
     initBoard();
-    sd1.setFS(SD);
-    delay(150);
-
-    // Configure time sync.
-    sntp_set_time_sync_notification_cb(timeAvailable);
-    sntp_servermode_dhcp(1);
-    configTzTime(time_zone, ntpServer1, ntpServer2);
 
 #ifdef HAS_RTC
-    // rtc.begin();
-    // rtc.getDateTime(time_info);
     if (have_rtc) {
         time_info = rtcLibtoC(rtc.now());
         Serial.println(&time_info, "[eRTC] RTC Time %Y-%m-%d %H:%M:%S ");
@@ -569,31 +561,7 @@ void setup() {
     }
 #endif
 
-    Serial.printf("RST: %s\n", printResetReason(reset_reason).c_str());
-    if (have_sd) {
-        sd1.begin("/LOGTEST");
-        sd1.beginCSV("/CSVTEST");
-        sd1.append("电池电压 %1.2fV\n", battery.readVoltage() * 2);
-        sd1.append(2, "调试等级 %d\n", LOG_VERBOSITY);
-        sd1.append("复位原因 %s\n", printResetReason(reset_reason).c_str());
-#ifdef HAS_RTC
-        if (have_rtc) {
-            sd1.append("RTC时间 %d-%02d-%02d %02d:%02d:%02d\n", time_info.tm_year + 1900, time_info.tm_mon + 1,
-                       time_info.tm_mday, time_info.tm_hour, time_info.tm_min, time_info.tm_sec);
-        }
-#endif
-    }
-
-    // flash.setIO(SPIFFS, Serial);
     flash.begin("cache", false);
-
-    // SPIFFS.format();
-    // flash.setIndexPath("/","index.bin");
-    // flash.usePath("/", "CACHE", false);
-    // flash.listDir("/");
-
-    // Process core dump.
-    readCoreDump();
 
     if (u8g2) {
         oled.setDisplay(u8g2);
@@ -603,22 +571,6 @@ void setup() {
         u8g2->setCursor(0, 52);
         u8g2->println("正在初始化...");
         u8g2->sendBuffer();
-    }
-
-    // initialize wireless network.
-    Serial.printf("Connecting to %s ", WIFI_SSID);
-    connectWiFi(WIFI_SSID, WIFI_PASSWORD, 1); // usually max_tries = 25.
-    if (isConnected()) {
-        ip = WiFi.localIP();
-        Serial.println();
-        Serial.print("[Telnet] ");
-        Serial.print(ip);
-        Serial.print(":");
-        Serial.println(port);
-        setupTelnet(); // todo: find another library / modify the code to support multiple client connection.
-    } else {
-        Serial.println();
-        Serial.println("Error connecting to WiFi, Telnet startup skipped.");
     }
 
     // Initialize SX1276
@@ -643,7 +595,6 @@ void setup() {
 
     digitalWrite(BOARD_LED, LED_OFF);
     Serial.printf("Booting time %llu ms\n", millis64() - runtime_timer);
-    sd1.append("启动用时 %llu ms\n", millis64() - runtime_timer);
     runtime_timer = 0;
 
     oled.showListening();
@@ -760,15 +711,8 @@ void checkNetwork() {
 
 // LOOP
 void loop() {
-    // reset watchdog
     esp_task_wdt_reset();
-    // if (millis64() - wdt_timer >= WDT_RST_PERIOD) {
-    //     uint64_t t = esp_timer_get_time() ;
-    //     auto r = esp_task_wdt_reset();
-    //     t = esp_timer_get_time() - t;
-    //     wdt_timer = millis64();
-    //     Serial.printf("WDT_RST %d [%llu]\n",r,t);
-    // }
+    
 #ifdef HAS_AD_BUTTON
     handleButtonInput();
 
@@ -830,34 +774,10 @@ void loop() {
         led_timer = 0;
         changeCpuFreq(240);
     }
-handleSerialInput();
-checkNetwork();
-handleTelnet();
-handleTelnetCall();
+    handleSerialInput();
 
-if (ble_enabled) {
-    handleBleConnections();
-    
-    if (deviceConnected) {
-        if (ble_timer == 0 || millis64() - ble_timer > 30000) {
-            Serial.println("[BLE] Connection active waiting for actual data");
-            ble_timer = millis64();
-        }
-    }
-}
-
-
-    if (millis64() > 60000 && format_task_timer == 0 &&
-        !exec_init_f80) // lower down frequency 60 sec after startup and idle.
-    {
-        if (isConnected())
-            setCpuFrequencyMhz(80);
-        else {
-            WiFiClass::mode(WIFI_OFF);
-            setCpuFrequencyMhz(80);
-            WiFiClass::mode(WIFI_MODE_STA);
-            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        }
+    if (millis64() > 60000 && format_task_timer == 0 && !exec_init_f80) {
+        setCpuFrequencyMhz(80);
         exec_init_f80 = true;
     }
 
@@ -934,14 +854,12 @@ if (ble_enabled) {
 
     // the number of batches to wait for
     // 2 batches will usually be enough to fit short and medium messages
-    if (pager.available() >= 2 && fd_state == TASK_INIT) { // todo add session timeout exception to prevent stuck here.
-        // Serial.println("[PHY-LAYER][D] AVAILABLE > 2.");
+    if (pager.available() >= 2 && fd_state == TASK_INIT) {
         setCpuFrequencyMhz(240);
         db = new data_bond;
         runtime_timer = millis64();
         timer4 = millis64();
         int state = pager.readDataMSA(db->pocsagData, 0);
-//        sd1.append("[PHY-LAYER][D] AVAILABLE > 2.\n");
         rxInfo.rssi = rssi_cache / (float) rxInfo.cnt;
         rssi_cache = 0;
         rxInfo.cnt = 0;
@@ -1059,21 +977,14 @@ void handleButtonInput() {
         }
         if (millis64() - btn_timer <= 120 && !btn_pressed) {
             uint16_t btn_level_prev = analogRead(BUTTON_PIN);
-            // Serial.printf("[D] GPIO 34-1: %d ADU\n", btn_level);
             uint16_t btn_level = analogRead(BUTTON_PIN);
-            // Serial.printf("[D] GPIO 34-2: %d ADU\n", btn_level);
-            if (btn_level >= 1450 && btn_level <= 1500 && abs(btn_level - btn_level_prev) < 15) {
+            if (btn_level >= 1400 && btn_level <= 1450 && abs(btn_level - btn_level_prev) < 15) {
                 btn_pressed = true;
                 oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
                 Serial.println(", KEY 1");
                 if (!oled.isEnabled() || oled.isSleep())
                     return;
-                // if (oled.isSleep()) {
-                //     oled.setSleep(false);
-                //     oled.updateInfo();
-                //     return;
-                // }
                 if (!oled.isMenu()) {
                     if (first_rx || !always_new) {
                         always_new = false;
@@ -1081,7 +992,7 @@ void handleButtonInput() {
                     oled.openMenu();
                 } else
                     oled.closeMenu();
-            } else if (btn_level >= 2250 && btn_level <= 2280) {
+            } else if (btn_level >= 2200 && btn_level <= 2250) {
                 btn_pressed = true;
                 oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
@@ -1110,7 +1021,7 @@ void handleButtonInput() {
                 // if (flash.retrieve(&lbj, &rx, &rx_time, &line, &id, &temp, -1)) {
                 //     oled.showLBJ(lbj, rx, rx_time, line, id, temp);
                 // }
-            } else if (btn_level >= 2990 && btn_level <= 3110) {
+            } else if (btn_level >= 3080 && btn_level <= 3110) {
                 btn_pressed = true;
                 oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
@@ -1128,7 +1039,7 @@ void handleButtonInput() {
                 } else {
                     oled.handleKey(false);
                 }
-            } else if (btn_level >= 4090 && btn_level <= 4096) {
+            } else if (btn_level >= 4090 && btn_level <= 4095) {
                 btn_pressed = true;
                 oled.updateSleepTimestamp();
                 Serial.printf("[D] GPIO 34: %d ADU", btn_level);
@@ -1415,8 +1326,6 @@ void initFmtVars() {
 
 void formatDataTask(void *pVoid) {
     fd_state = TASK_RUNNING;
-    // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "格式化任务已创建\n");
     bool empty = true;
     for (int i = 0; i < POCDAT_SIZE; i++) {
         if (db->pocsagData[i].is_empty)
@@ -1440,24 +1349,7 @@ void formatDataTask(void *pVoid) {
         }
         Serial.printf("[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func,
                       db->pocsagData[i].str.c_str());
-        // String epi_s;
-        // // [D-pDATA] 1234000/1: 50015  19 -----
-        // // [D-pDATA] EPIs: 1    0    0    0
-        // // [D-pDATA] EPI: 1a0m0m0m
-        // // [D-pDATA] 1234002/1: 20201670000630U)*9UU*6 (-(202011618444639511203000
-        // // [D-pDATA] EPI: 0a0m0m0m0m0m0m0m0m0m0m0i
-        // for (int j = 0; j < db->pocsagData[i].epi.length(); j+=2) {
-        //     epi_s += db->pocsagData[i].epi[j];
-        //     if (String(db->pocsagData[i].epi[j+1]) == "i") {
-        //         epi_s += "I   ";
-        //         break;
-        //     }
-        //     epi_s += "    ";
-        // }
-        // Serial.printf("[D-pDATA] EPIs: %s\n", epi_s.c_str());
         Serial.printf("[D-pDATA] EPI: %s\n", db->pocsagData[i].epi.c_str());
-        sd1.append(2, "[D-pDATA] %d/%d: %s\n", db->pocsagData[i].addr, db->pocsagData[i].func,
-                   db->pocsagData[i].str.c_str());
         db->str = db->str + "  " + db->pocsagData[i].str;
     }
     if (empty) {
@@ -1465,53 +1357,15 @@ void formatDataTask(void *pVoid) {
         task_fd = nullptr;
         vTaskDelete(nullptr);
         Serial.println("[D] Empty message");
+        return;
     }
 
-    float temp = 0.01;
-#ifdef HAS_RTC
-    if (have_rtc)
-        temp = rtc.getTemperature();
-#endif
-
-    // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
-    Serial.printf("decode complete.[%llu]", millis64() - runtime_timer);
+    Serial.printf("decode complete.[%llu]\n", millis64() - runtime_timer);
     readDataLBJ(db->pocsagData, &db->lbjData);
-    sd1.append(2, "LBJ读取完成，用时[%llu]\n", millis64() - runtime_timer);
-    Serial.printf("Read complete.[%llu]", millis64() - runtime_timer);
-    // Serial.printf("[FD-Task] Stack High Mark rLBJ %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    Serial.printf("[D-LEPI][%s]", db->lbjData.epi.c_str());
+    Serial.printf("Read complete.[%llu]\n", millis64() - runtime_timer);
+    Serial.printf("[D-LEPI][%s]\n", db->lbjData.epi.c_str());
 
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
-    sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
-    
-    if (ble_enabled && db != nullptr) {
-        try {
-            sendTrainDataOverBLE(db->lbjData, rxInfo, false);
-            Serial.println("[BLE] Data sent over BLE");
-        } catch (...) {
-            Serial.println("[BLE] Error occurred while sending data over BLE");
-        }
-    }
-    Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
-
-    flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
-    if (always_new)
-        flash.toLatest();
-
-    Serial.printf("flash append complete.[%llu]", millis64() - runtime_timer);
-
-    // sd1.disableSizeCheck();
-    appendDataLog(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
-    appendDataCSV(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
-    // sd1.enableSizeCheck();
-
-    printDataTelnet(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("telprint complete.[%llu]", millis64() - runtime_timer);
-    // Serial.printf("[FD-Task] Stack High Mark TRI-OUT %u\n", uxTaskGetStackHighWaterMark(nullptr));
-// Serial.printf("type %d \n",lbj.type);
 
 #ifdef HAS_DISPLAY
     fd_state = TASK_RUNNING_SCREEN;
@@ -1525,10 +1379,13 @@ void formatDataTask(void *pVoid) {
         Serial.printf("Complete u8g2 [%llu]\n", millis64() - runtime_timer);
     }
 #endif
-    Serial.printf("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "任务堆栈标 %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    // sd1.append("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "格式化输出任务完成，用时[%llu]\n", millis64() - runtime_timer);
+
+    // 通过蓝牙发送数据
+    if(ble_enabled) {
+        Serial.println("[BLE] Sending train data");
+        sendTrainDataOverBLE(db->lbjData, rxInfo, false);
+    }
+
     fd_state = TASK_DONE;
     task_fd = nullptr;
     vTaskDelete(nullptr);

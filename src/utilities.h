@@ -1,6 +1,8 @@
 
 #pragma once
 
+#define BLE_DEVICE_NAME        "LBJReceiver"
+
 /*
 * This sample program only supports SX1276
 * */
@@ -136,10 +138,10 @@
 
 #define ADC_PIN                     35
 
-#define HAS_SDCARD
+//#define HAS_SDCARD
 #define HAS_DISPLAY
 #define FONT_12_GB2312 u8g2_font_wqy12_t_gb2312
-#define HAS_RTC // soldered an external DS3231 module.
+//#define HAS_RTC // soldered an external DS3231 module.
 #define HAS_AD_BUTTON // soldered an external AD button.
 #define BUTTON_PIN                  34
 
