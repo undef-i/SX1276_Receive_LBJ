@@ -45,7 +45,7 @@ private:
     uint16_t lines;
     int32_t ret_lines; // defaults -1
     uint32_t ids;
-    const char *partition_name = "nvs_ext";
+    const char *partition_name = "nvs";
 };
 
 

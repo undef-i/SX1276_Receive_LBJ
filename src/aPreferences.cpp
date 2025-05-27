@@ -10,23 +10,52 @@ aPreferences::aPreferences() : pref{}, have_pref(false), overflow(false), lines(
 }
 
 bool aPreferences::begin(const char *name, bool read_only) {
-    if (!pref.begin(name, read_only, partition_name))
+    Serial.printf("[NVS] 开始初始化命名空间: %s, 分区: %s\n", name, partition_name);
+    
+    // 初始化指定分区
+    esp_err_t err = nvs_flash_init_partition(partition_name);
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        Serial.println("[NVS] 分区需要擦除重新格式化");
+        // 擦除并重新初始化
+        err = nvs_flash_erase_partition(partition_name);
+        if (err != ESP_OK) {
+            Serial.printf("[NVS] 分区擦除失败: %s\n", esp_err_to_name(err));
+            return false;
+        }
+        err = nvs_flash_init_partition(partition_name);
+    }
+    if (err != ESP_OK) {
+        Serial.printf("[NVS] 分区初始化失败: %s\n", esp_err_to_name(err));
         return false;
+    }
+    
+    // 尝试打开命名空间
+    if (!pref.begin(name, read_only, partition_name)) {
+        Serial.printf("[NVS] 初始化失败: 无法打开命名空间\n");
+        return false;
+    }
     have_pref = true;
     ns_name = name;
 
-    if (pref.isKey("ids"))
+    if (pref.isKey("ids")) {
         ids = pref.getUInt("ids");
-    if (pref.isKey("lines"))
+        Serial.printf("[NVS] 读取已存储ID: %u\n", ids);
+    }
+    if (pref.isKey("lines")) {
         lines = pref.getUShort("lines");
+        Serial.printf("[NVS] 读取已存储行数: %u\n", lines);
+    }
     ret_lines = lines;
 
     char buf[8];
     sprintf(buf, "I%04d", lines + 1);
-    if (pref.isKey(buf))
+    if (pref.isKey(buf)) {
         overflow = true;
+        Serial.printf("[NVS] 检测到存储溢出\n");
+    }
 
     getStats();
+    Serial.println("[NVS] 初始化完成");
     return true;
 }
 
@@ -200,19 +229,31 @@ void aPreferences::toLatest(int8_t bias) {
 }
 
 void aPreferences::getStats() {
-    if (!have_pref)
+    if (!have_pref) {
+        Serial.println("[NVS] 无法获取统计信息: 存储未初始化");
         return;
+    }
     nvs_stats_t stats;
-    nvs_get_stats(partition_name, &stats);
-    Serial.printf("[NVS] %s stats: UsedEntries = %d, FreeEntries = %d, AllEntries = %d\n",
-                  partition_name, stats.used_entries, stats.free_entries, stats.total_entries);
+    if (nvs_get_stats(partition_name, &stats) != ESP_OK) {
+        Serial.println("[NVS] 获取统计信息失败");
+        return;
+    }
+    
+    float usage_percent = (float)stats.used_entries / stats.total_entries * 100;
+    Serial.printf("[NVS] 分区使用情况 (%s):\n", partition_name);
+    Serial.printf("  - 已用条目: %d\n  - 空闲条目: %d\n  - 总条目数: %d\n  - 使用率: %.1f%%\n",
+                 stats.used_entries, stats.free_entries, stats.total_entries, usage_percent);
+    
     nvs_handle_t handle;
-    nvs_open_from_partition(partition_name, ns_name, NVS_READONLY, &handle);
+    if (nvs_open_from_partition(partition_name, ns_name, NVS_READONLY, &handle) != ESP_OK) {
+        Serial.println("[NVS] 打开命名空间失败");
+        return;
+    }
     size_t used_entries;
     nvs_get_used_entry_count(handle, &used_entries);
     nvs_close(handle);
-    Serial.printf("[NVS] %d entries in namespace %s\n", used_entries, ns_name);
-    Serial.printf("[NVS] Current line %d, id %d\n", lines, ids);
+    Serial.printf("[NVS] 命名空间 %s 使用的条目数: %d\n", ns_name, used_entries);
+    Serial.printf("[NVS] 当前行数: %d, ID: %d\n", lines, ids);
 }
 
 bool aPreferences::isLatest(int8_t bias) const {
