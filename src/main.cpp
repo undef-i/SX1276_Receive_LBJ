@@ -552,6 +552,16 @@ void setup() {
     runtime_timer = millis64();
     initBoard();
 
+    // 初始化NVS
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        Serial.println("[NVS] Erasing NVS and trying again...");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+    Serial.println("[NVS] Initialized successfully");
+
 #ifdef HAS_RTC
     if (have_rtc) {
         time_info = rtcLibtoC(rtc.now());
@@ -561,7 +571,14 @@ void setup() {
     }
 #endif
 
-    flash.begin("cache", false);
+    if (!flash.begin("cache", false)) {
+        Serial.println("[NVS] Failed to initialize cache, retrying...");
+        // 重试一次
+        delay(100);
+        if (!flash.begin("cache", false)) {
+            Serial.println("[NVS] Cache initialization failed!");
+        }
+    }
 
     if (u8g2) {
         oled.setDisplay(u8g2);
@@ -1366,6 +1383,15 @@ void formatDataTask(void *pVoid) {
     Serial.printf("[D-LEPI][%s]\n", db->lbjData.epi.c_str());
 
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
+    
+    // 保存数据到内部存储
+    float temp = 0;
+#ifdef HAS_RTC
+    if (have_rtc) {
+        temp = rtc.getTemperature();
+    }
+#endif
+    flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
 
 #ifdef HAS_DISPLAY
     fd_state = TASK_RUNNING_SCREEN;
@@ -1400,6 +1426,17 @@ void simpleFormatTask() { // only output initially phrased data in case of memor
         // db->str = db->str + "  " + i.str;
         db->str += String(i.addr) + "/" + String(i.func) + ":" + i.str + "\n ";
     }
+    
+    // 即使在简单格式下也保存数据
+    float temp = 0;
+#ifdef HAS_RTC
+    if (have_rtc) {
+        temp = rtc.getTemperature();
+    }
+#endif
+    readDataLBJ(db->pocsagData, &db->lbjData);
+    flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
+    
     // pword(db->str.c_str(),20,50);
     oled.showSTR(db->str);
 }

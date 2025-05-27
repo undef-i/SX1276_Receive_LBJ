@@ -67,8 +67,11 @@ void ScreenWrapper::showInitComp() {
     sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
     display->drawStr(108, 64, buffer);
     // top (0,0,128,8)
-    sprintf(buffer, "%d-%02d-%02d %02d:%02d", time_info.tm_year + 1900, time_info.tm_mon + 1, time_info.tm_mday,
-            time_info.tm_hour, time_info.tm_min);
+    voltage = battery.readVoltage() * 2;
+    int batteryPercentage = ((voltage - 3.15) / (4.2 - 3.15)) * 100;
+    if (batteryPercentage > 100) batteryPercentage = 100;
+    if (batteryPercentage < 0) batteryPercentage = 0;
+    sprintf(buffer, "%d%%", batteryPercentage);
     display->drawStr(0, 7, buffer);
     display->sendBuffer();
 }

@@ -44,37 +44,12 @@ void silentConnect(const char *ssid, const char *password) {
 }
 
 void changeCpuFreq(uint32_t freq_mhz) {
-    /*TODO: The wireless function is giving me a headache.
-     * changing frequency during wifi connected may trigger disconnection, while giving a restart WILL trigger
-     * a disconnection and cause the loop to stuck up to 1000 MS!
-     * A WiFi.setSleep(true) workaround was provided on https://github.com/espressif/arduino-esp32/issues/7240
-     * currently unverified and may cause other problems.
-     * The WiFi restart workaround currently using while wifi disconnected may stuck the main loop from 20ms up
-     * to 1000ms, which needs further improvements. */
-    if (isConnected() || no_wifi) {
-        if (ets_get_cpu_frequency() != freq_mhz) {
-            setCpuFrequencyMhz(freq_mhz);
-            if (no_wifi) {
-                auto timer = millis64();
-                WiFiClass::mode(WIFI_OFF);
-                WiFi.setSleep(true);
-                // Serial.printf("[D] Switch to 80MHz, WIFI OFF [%llu] \n", millis64() - timer);
-            }
-        }
-    } else {
-        // Serial.println("[D] CALL WIFI OFF");
-        auto timer = millis64();
-        WiFiClass::mode(WIFI_OFF);
-        Serial.printf("[D] WIFI OFF [%llu] \n", millis64() - timer);
-        if (ets_get_cpu_frequency() != freq_mhz)
-            setCpuFrequencyMhz(freq_mhz);
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        // Serial.println("[D] WIFI BEGIN");
-        WiFiClass::mode(WIFI_MODE_STA);
-        // Serial.println("[D] WIFI STA");
-//        WiFi.setAutoReconnect(true);
-//        WiFi.persistent(true);
+    if (ets_get_cpu_frequency() != freq_mhz) {
+        setCpuFrequencyMhz(freq_mhz);
     }
+    // 强制关闭WiFi
+    WiFiClass::mode(WIFI_OFF);
+    WiFi.setSleep(true);
 }
 
 /* ------------------------------------------------ */
