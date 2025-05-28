@@ -123,6 +123,7 @@ Menu oled;
 struct rx_info rxInfo;
 struct data_bond *db = nullptr;
 bool always_new = true;
+struct lbj_data current_lbj_data;  // 当前显示的列车数据
 // PagerClient::pocsag_data *pd = nullptr;
 //endregion
 

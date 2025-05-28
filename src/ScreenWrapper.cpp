@@ -4,6 +4,9 @@
 
 #include "ScreenWrapper.h"
 
+// 声明外部变量
+extern struct lbj_data current_lbj_data;
+
 bool ScreenWrapper::setDisplay(DISPLAY_MODEL *display_ptr) {
     this->display = display_ptr;
     if (!this->display)
@@ -27,11 +30,11 @@ void ScreenWrapper::updateInfo() {
         int batteryPercentage = ((voltage - 3.15) / (4.2 - 3.15)) * 100;
         if (batteryPercentage > 100) batteryPercentage = 100;
         if (batteryPercentage < 0) batteryPercentage = 0;
-        sprintf(buffer, "%d%%", batteryPercentage);
+        snprintf(buffer, sizeof(buffer), "%d%%", batteryPercentage);
         display->drawStr(0, 7, buffer);
 #ifdef HAS_RTC
         if (have_rtc) {
-            sprintf(buffer, "%dC", (int) rtc.getTemperature());
+            snprintf(buffer, sizeof(buffer), "%dC", (int) rtc.getTemperature());
             display->drawStr(80, 7, buffer);
         }
 #endif
@@ -46,9 +49,9 @@ void ScreenWrapper::updateInfo() {
         display->drawBox(73, 56, 56, 8);
         display->setDrawColor(1);
     }
-    sprintf(buffer, "%.1f", getBias(actual_frequency));  // PPM偏差值
+    snprintf(buffer, sizeof(buffer), "%.1f", getBias(actual_frequency));  // PPM偏差值
     display->drawStr(73, 64, buffer);
-    sprintf(buffer, "%dMHz", ets_get_cpu_frequency());  // CPU频率完整显示
+    snprintf(buffer, sizeof(buffer), "%dMHz", ets_get_cpu_frequency());  // CPU频率完整显示
     int strWidth = display->getStrWidth(buffer);
     display->drawStr(128 - strWidth, 64, buffer);  // 右对齐显示
     display->sendBuffer();
@@ -62,26 +65,26 @@ void ScreenWrapper::showInitComp() {
     // bottom (0,56,128,8)
     display->drawStr(0, 64, BLE_DEVICE_NAME);
     char buffer[32];
-    sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
-    display->drawStr(96, 64, buffer);
-    sprintf(buffer, "%1.2f", battery.readVoltage() * 2);
-    display->drawStr(108, 64, buffer);
+    snprintf(buffer, sizeof(buffer), "%dMHz", ets_get_cpu_frequency());
+    int strWidth = display->getStrWidth(buffer);
+    display->drawStr(128 - strWidth, 64, buffer);  
     // top (0,0,128,8)
     voltage = battery.readVoltage() * 2;
     int batteryPercentage = ((voltage - 3.15) / (4.2 - 3.15)) * 100;
     if (batteryPercentage > 100) batteryPercentage = 100;
     if (batteryPercentage < 0) batteryPercentage = 0;
-    sprintf(buffer, "%d%%", batteryPercentage);
+    snprintf(buffer, sizeof(buffer), "%d%%", batteryPercentage);
     display->drawStr(0, 7, buffer);
     display->sendBuffer();
 }
 
 void ScreenWrapper::pword(const char *msg, int xloc, int yloc) {
+    if (!msg || !display) return;
     int dspW = display->getDisplayWidth();
     int strW = 0;
     char glyph[2];
     glyph[1] = 0;
-    for (const char *ptr = msg; *ptr; *ptr++) {
+    for (const char *ptr = msg; *ptr; ptr++) {
         glyph[0] = *ptr;
         strW += display->getStrWidth(glyph);
         ++strW;
@@ -757,18 +760,27 @@ void ScreenWrapper::showInfo(int8_t page) {
             display->drawUTF8(0, 26, ("条目: " + tokens[0] + "," + tokens[27]).c_str());
             display->drawUTF8(0, 38, ("接收日期: " + tokens[4]).c_str());
             display->drawUTF8(0, 50, ("接收时间: " + tokens[5]).c_str());
-            uint64_t time = std::stoull(tokens[2].c_str());
-            display->drawUTF8(0, 62, ("系统时间: " + String(time / 1000) + " ms").c_str());
+            try {
+                uint64_t time = std::stoull(tokens[2].c_str());
+                display->drawUTF8(0, 62, ("系统时间: " + String(time / 1000) + " ms").c_str());
+            } catch (const std::exception& e) {
+                display->drawUTF8(0, 62, "系统时间: 无效");
+            }
             break;
         }
         case 2: {
             display->drawUTF8(0, 26, ("电压:" + tokens[1] + "V 温度:" + tokens[3] + "C").c_str());
-            float fer = std::stof(tokens[25].c_str());
-            sprintf(buffer, "测量频偏: %.2f Hz", fer);
-            display->drawUTF8(0, 38, buffer);
-            fer = std::stof(tokens[26].c_str());
-            sprintf(buffer, "设定频偏: %.2f ppm", fer);
-            display->drawUTF8(0, 50, buffer);
+            try {
+                float fer = std::stof(tokens[25].c_str());
+                sprintf(buffer, "测量频偏: %.2f Hz", fer);
+                display->drawUTF8(0, 38, buffer);
+                fer = std::stof(tokens[26].c_str());
+                sprintf(buffer, "设定频偏: %.2f ppm", fer);
+                display->drawUTF8(0, 50, buffer);
+            } catch (const std::exception& e) {
+                display->drawUTF8(0, 38, "测量频偏: 无效");
+                display->drawUTF8(0, 50, "设定频偏: 无效");
+            }
             break;
         }
         case 3: {
@@ -785,6 +797,7 @@ void ScreenWrapper::showInfo(int8_t page) {
 }
 
 void ScreenWrapper::pwordUTF8(const String &msg, int xloc, int yloc, int xmax, int ymax) {
+    if (!display || msg.isEmpty() || xmax <= xloc || ymax <= yloc) return;
     int Width = xmax - xloc;
     int Height = ymax - yloc;
     int StrW = display->getUTF8Width(msg.c_str());
@@ -795,7 +808,7 @@ void ScreenWrapper::pwordUTF8(const String &msg, int xloc, int yloc, int xmax, i
     String str = msg;
     for (int i = 0, j = yloc; i <= lines; ++i, j += CharHeight) {
         auto c = str.length();
-        while (StrW > Width) {
+        while (StrW > Width && c > 0) {
             StrW = display->getUTF8Width(str.substring(0, c).c_str());
             --c;
         }

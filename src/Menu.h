@@ -14,8 +14,8 @@ enum menu_pages {
     MENU_FREQ,
     MENU_FREQ_READ_PPM,
     MENU_FREQ_PPM_SET,
-    MENU_TF_SETTINGS,
-    MENU_TF_CONFIRM,
+    MENU_STORAGE_INFO,
+    MENU_STORAGE_SETTINGS,
     MENU_INDEX,
     MENU_INDEX_INPUT,
     MENU_OLED,
@@ -41,13 +41,16 @@ private:
     void showLast();
     void showFreq(bool send = false);
     void showReadPPM();
-    void showTFSettings(int16_t page);
+    void showStorageInfo(int16_t page);
     void highlightReadPPM(int8_t item);
     void alterDigitPPM(int8_t item, bool plus);
     void drawDigitPPM(int8_t item, bool inv = true, bool send = false);
     void confirmDigitAltPPM();
-    void confirmUnmount();
     void showIndexFile();
+    // 内部存储功能
+    void handleStorageInfoDisplay();   // 显示存储使用情况
+    void handleStorageMonitoring();    // 显示存储状态监控
+    void handleStorageLimitSettings(); // 存储限制设置
     void highlightIndex(int8_t item);
     void alterDigitIndex(int8_t item, bool plus);
     void drawDigitIndex(int8_t item, bool inv = true, bool send = false);

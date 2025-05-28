@@ -166,55 +166,20 @@ void Menu::handleKey(bool up) {
         case MENU_FREQ_PPM_SET:
             alterDigitPPM(selected_item, up);
             break;
-        case MENU_TF_SETTINGS:
+        case MENU_STORAGE_INFO:
             if (up)
                 sub_page--;
             else
                 sub_page++;
-            if (sub_page > 2)
-                sub_page = 1;
-            if (sub_page < 1)
-                sub_page = 2;
-            // if (selected_item < 0) {
-            //     selected_item = 6;
-            // }
-            // if (selected_item > 6) {
-            //     selected_item = 0;
-            // }
-            showTFSettings(sub_page);
-            if (sub_page == 1) {
-                if (selected_item != 0)
-                    selected_item = 0;
-                highlightItem(selected_item);
+            if (sub_page < 1) {
+                showLast();  // 返回上级菜单
+                break;
             }
-
-            break;
-        case MENU_TF_CONFIRM:
-            if (up)
-                selected_item--;
-            else
-                selected_item++;
-            if (selected_item < 0) {
-                selected_item = 1;
+            if (sub_page > 3) {
+                showLast();  // 返回上级菜单
+                break;
             }
-            if (selected_item > 1) {
-                selected_item = 0;
-            }
-            if (selected_item == 1) {
-                confirmUnmount();
-                display->drawBox(64, 49, 51, 12);
-                display->setDrawColor(0);
-                display->drawUTF8(76, 60, "取消");
-                display->setDrawColor(1);
-                display->sendBuffer();
-            } else {
-                confirmUnmount();
-                display->drawBox(13, 49, 51, 12);
-                display->setDrawColor(0);
-                display->drawUTF8(26, 60, "确定");
-                display->setDrawColor(1);
-                display->sendBuffer();
-            }
+            showStorageInfo(sub_page);
             break;
         case MENU_INDEX:
             if (up)
@@ -271,14 +236,14 @@ void Menu::showSettings(int16_t page) {
     display->setFont(FONT_12_GB2312);
     display->drawUTF8(0, 12, "系统设置");
     char buffer[34];
-    sprintf(buffer, "%d", page);
+    snprintf(buffer, sizeof(buffer), "%d", page);
     display->drawUTF8(118, 12, buffer);
     display->drawHLine(0, 14, 128);
 
     switch (page) {
         case -1: {
             items[0] = "频率校正";
-            items[1] = "TF卡设置";
+            items[1] = "内部存储";
             items[2] = "索引条目";
             items[3] = "关于";
             for (int i = 0, c = 26; i < 4; ++i, c += 12) {
@@ -318,6 +283,10 @@ void Menu::acknowledge() {
         showLast();
         return;
     }
+    extern struct lbj_data current_lbj_data;
+    extern struct rx_info rxInfo;
+    extern void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest);
+    
     switch (menu_page) {
         case MENU_SETTINGS:
             if (sub_page == -1) {
@@ -329,11 +298,8 @@ void Menu::acknowledge() {
                         highlightItem(selected_item);
                         break;
                     case 1:
-                        menu_page = MENU_TF_SETTINGS;
-                        sub_page = 1;
-                        showTFSettings(sub_page);
-                        selected_item = 0;
-                        highlightItem(selected_item);
+                        sub_page = 1; // 将 sub_page 设置为 1，表示进入存储信息页面
+                        showStorageInfo(sub_page);
                         break;
                     case 2:
                         menu_page = MENU_INDEX;
@@ -439,45 +405,35 @@ void Menu::acknowledge() {
             highlightReadPPM(selected_item);
             menu_page = MENU_FREQ_READ_PPM;
             break;
-        case MENU_TF_SETTINGS:
-            if (sub_page == 1 && selected_item == 0) {
-                if (!sd1.status()) {
-                    // mount
-                    items[0] = "正在挂载SD...";
-                    highlightItem(0);
-                    Serial.println("[SDLOG] issued SD reopen.");
-                    SD_LOG::reopenSD();
-                    sd1.begin("/LOGTEST");
-                    esp_task_wdt_reset();
-                    sd1.beginCSV("/CSVTEST");
-                    sd1.append("[SDLOG] SD卡已重新挂载\n");
-                    Serial.println("$ [SDLOG] SD reopen.");
-                } else {
-                    // unmount
-                    menu_page = MENU_TF_CONFIRM;
-                    confirmUnmount();
-                    selected_item = 1;
-                    display->drawBox(64, 49, 51, 12);
-                    display->setDrawColor(0);
-                    display->drawUTF8(76, 60, "取消");
-                    display->setDrawColor(1);
-                    display->sendBuffer();
-                    // Serial.println("[SDLOG] issued SD end.");
-                    // sd1.append("[SDLOG] SD卡将被卸载\n");
-                    // sd1.end();
-                    // Serial.println("$ [SDLOG] SD end.");
-                }
-            }
+        case MENU_RX_INFO:
+            // 通过蓝牙重发当前条目
+            showMessage("信息", "正在通过蓝牙补发...");
+            sendTrainDataOverBLE(current_lbj_data, rxInfo, false);
+            showMessage("信息", "补发完成");
+            delay(1000);
+            showInfo((int8_t)sub_page);
             break;
-        case MENU_TF_CONFIRM:
-            if (selected_item) {
-                showLast();
-            } else {
-                showLast();
-                Serial.println("[SDLOG] issued SD end.");
-                sd1.append("[SDLOG] SD卡将被卸载\n");
-                sd1.end();
-                Serial.println("$ [SDLOG] SD end.");
+        case MENU_STORAGE_INFO:
+            switch (sub_page) {
+                case 1: // 存储信息显示
+                    handleStorageInfoDisplay();
+                    break;
+                case 2: // 存储状态监控
+                    handleStorageMonitoring();
+                    break;
+                case 3: // 清除数据确认
+                    showMessage("信息", "正在清除存储数据...");
+                    if(flash->clearData()) {
+                        showMessage("信息", "存储数据清除成功！");
+                    } else {
+                        showMessage("错误", "存储数据清除失败！");
+                    }
+                    delay(1000);
+                    showStorageInfo(3);
+                    break;
+                default:
+                    showLast();
+                    break;
             }
             break;
         case MENU_INDEX:
@@ -574,19 +530,12 @@ void Menu::showLast() {
             highlightReadPPM(selected_item);
             menu_page = MENU_FREQ_READ_PPM;
             break;
-        case MENU_TF_SETTINGS:
+        case MENU_STORAGE_INFO:
             sub_page = -1;
             showSettings(sub_page);
-            selected_item = 0;
+            selected_item = 1;  // 选择内部存储菜单项
             highlightItem(selected_item);
             menu_page = MENU_SETTINGS;
-            break;
-        case MENU_TF_CONFIRM:
-            selected_item = 0;
-            sub_page = 1;
-            showTFSettings(sub_page);
-            highlightItem(selected_item);
-            menu_page = MENU_TF_SETTINGS;
             break;
         case MENU_INDEX:
             selected_item = 2;
@@ -631,9 +580,9 @@ void Menu::showAbout(int16_t page) {
 
     char buffer[32];
     if (page == 1) {
-        sprintf(buffer, "SX1276_RX_LBJ 项目");
+        snprintf(buffer, sizeof(buffer), "SX1276_RX_LBJ 项目");
         display->drawUTF8(0, 26, buffer);
-        sprintf(buffer, "基于ESP32-Arduino");
+        snprintf(buffer, sizeof(buffer), "基于ESP32-Arduino");
         display->drawUTF8(0, 38, buffer);
         const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
                                                             ESP_PARTITION_SUBTYPE_APP_OTA_0, "app0");
@@ -642,16 +591,16 @@ void Menu::showAbout(int16_t page) {
         String hash;
         for (unsigned char i: sha256) {
             char buf[4];
-            sprintf(buf, "%02x", i);
+            snprintf(buf, sizeof(buf), "%02x", i);
             hash += buf;
         }
-        sprintf(buffer, "版本: %s", hash.substring(0, 16).c_str());
+        snprintf(buffer, sizeof(buffer), "版本: %s", hash.substring(0, 16).c_str());
         display->drawUTF8(0, 50, buffer);
-        sprintf(buffer, "构建日期: %s", __DATE__);
+        snprintf(buffer, sizeof(buffer), "构建日期: %s", __DATE__);
         display->drawUTF8(0, 62, buffer);
 
     } else if (page == 2) {
-        sprintf(buffer, "构建时间: %s", __TIME__);
+        snprintf(buffer, sizeof(buffer), "构建时间: %s", __TIME__);
         display->drawUTF8(0, 26, buffer);
     }
 
@@ -867,11 +816,10 @@ void Menu::updatePage() {
             showFreq();
             highlightItem(selected_item);
             break;
-        case MENU_TF_SETTINGS:
-            if (sub_page != 1)
-                return;
-            showTFSettings(sub_page);
-            highlightItem(selected_item);
+        case MENU_STORAGE_INFO:
+            if (sub_page == 2) { // 存储状态监控页面需要动态更新
+                handleStorageMonitoring();
+            }
             break;
         default:
             return;
@@ -880,62 +828,92 @@ void Menu::updatePage() {
     update_timer = millis64();
 }
 
-void Menu::showTFSettings(int16_t page) {
+void Menu::showStorageInfo(int16_t page) {
+    this->sub_page = page; // 保存当前子页面状态
+    menu_page = MENU_STORAGE_INFO;  // 确保设置正确的菜单页面
     clearAll();
     display->setFont(FONT_12_GB2312);
-    display->drawUTF8(0, 12, "TF卡设置");
-    display->drawHLine(0, 14, 128);
 
-    if (!sd1.status()) {
-        if (sub_page != 1)
-            sub_page = 1;
-        items[0] = "装载TF卡";
-        display->drawUTF8(0, 26, items[0].c_str());
-        display->drawUTF8(0, 38, "未插入TF卡");
-        return;
-    }
-
-    display->drawUTF8(118, 12, String(page).c_str());
     switch (page) {
-        case 1: {
-            items[0] = "卸载TF卡";
-            display->drawUTF8(0, 26, items[0].c_str());
-            char buffer[64];
-            sprintf(buffer, "已使用: %02.2f/%02.2f GB", (double) SD.usedBytes() / (1024 * 1024 * 1024),
-                    (double) SD.totalBytes() / (1024 * 1024 * 1024));
-            display->drawUTF8(0, 38, buffer);
-            display->drawUTF8(0, 50, ("日志: " + sd1.retFilename(SDLOG_FILE_LOG)).c_str());
-            display->drawUTF8(0, 62, ("CSV: " + sd1.retFilename(SDLOG_FILE_CSV)).c_str());
+        case 1: // 存储信息显示
+            selected_item = -1; // Explicitly set selected_item to -1 for this non-interactive page
+            handleStorageInfoDisplay();
+            // 此页面不应有可选择项，移除 highlightItem 调用或确保 selected_item 正确
+            break;
+        case 2: // 存储状态监控
+            handleStorageMonitoring();
+            break;
+        case 3: { // 清除数据确认
+            display->drawUTF8(0, 12, "内部存储");
+            display->drawHLine(0, 14, 128);
+            display->drawUTF8(0, 26, "确认清除所有存储数据？");
+            display->drawUTF8(0, 38, "此操作不可恢复！");
+            items[0] = "点击确认清除数据";
+            display->drawUTF8(0, 50, items[0].c_str());
+            display->drawUTF8(0, 62, "左右切换返回上级菜单");
+            highlightItem(0);
             break;
         }
-        case 2:
-            if (sd1.retFilename(SDLOG_FILE_CD).length()) {
-                display->drawUTF8(0, 26, ("转储文件: " + sd1.retFilename(SDLOG_FILE_CD)).c_str());
-            } else {
-                display->drawUTF8(0, 26, "无转储文件");
-            }
-            display->sendBuffer();
-            break;
         default:
-            return;
+            break;
     }
-
+    
+    display->sendBuffer();
 }
 
-void Menu::confirmUnmount() {
-    display->setDrawColor(0);
-    display->drawBox(12, 4, 104, 58);
-    display->setDrawColor(1);
-    display->drawFrame(12, 4, 104, 58);
-    display->drawUTF8(15, 16, "卸载TF卡");
-    display->drawHLine(14, 18, 100);
+void Menu::handleStorageInfoDisplay() {
+    clearAll();
+    display->setFont(FONT_12_GB2312);
+    display->drawUTF8(0, 12, "内部存储");
+    display->drawHLine(0, 14, 128);
+    display->drawUTF8(0, 26, "总存储信息：");
+    
+    char buffer[64];
+    uint32_t total_space = flash->getTotalSpace();
+    uint32_t used_space = flash->getUsedSpace();
+    uint32_t file_count = flash->getFileCount();
+    
+    snprintf(buffer, sizeof(buffer), "总容量: %d KB", total_space / 1024);
+    display->drawUTF8(0, 38, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "已用: %d KB (%d%%)", used_space / 1024, (used_space * 100) / total_space);
+    display->drawUTF8(0, 50, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "剩余: %d KB", (total_space - used_space) / 1024);
+    display->drawUTF8(0, 62, buffer);  // 修改Y坐标从50到62
+    
+    snprintf(buffer, sizeof(buffer), "文件数: %d", file_count);
+    display->drawUTF8(0, 74, buffer);  // 相应地，也需要修改这行的Y坐标从62到74
+    
+    display->sendBuffer();
+}
 
-    display->drawUTF8(18, 34, "是否卸载TF卡?");
-
-    display->drawHLine(14, 48, 100);
-    display->drawVLine(64, 50, 10);
-    display->drawUTF8(26, 60, "确定");
-    display->drawUTF8(76, 60, "取消");
+void Menu::handleStorageMonitoring() {
+    clearAll();
+    display->setFont(FONT_12_GB2312);
+    display->drawUTF8(0, 12, "内部存储");
+    display->drawHLine(0, 14, 128);
+    display->drawUTF8(0, 26, "状态监控：");
+    
+    char buffer[64];
+    uint32_t write_count = flash->getWriteCount();
+    uint32_t error_count = flash->getErrorCount();
+    uint8_t health = flash->getStorageHealth();
+    
+    snprintf(buffer, sizeof(buffer), "写入次数: %d", write_count);
+    display->drawUTF8(0, 38, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "错误次数: %d", error_count);
+    display->drawUTF8(0, 50, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "存储健康度: %d%%", health);
+    display->drawUTF8(0, 62, buffer);
+    
+    if (health < 20) {
+        showMessage("警告", "存储接近寿命！");
+    }
+    
+    display->sendBuffer();
 }
 
 void Menu::showIndexFile() {

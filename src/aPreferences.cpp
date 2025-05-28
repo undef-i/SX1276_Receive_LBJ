@@ -129,7 +129,7 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
     } else {
         if (ret_lines < 0)
             ret_lines = lines - 1;
-        if (ret_lines == lines)
+        if (ret_lines >= lines)
             ret_lines = 0;
     }
 
@@ -154,6 +154,7 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
     for (size_t i = 0, c = 0; i < line.length(); i++) {
         if (line[i] == ',') {
             c++;
+            if (c >= 29) break; // 防止超出数组边界
             continue;
         }
         if (c < 29)
@@ -162,54 +163,58 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
 
     try {
         // 基本数据转换
-        if (!tokens[0].isEmpty()) *line_num = std::stoi(tokens[0].c_str());
-        if (!tokens[3].isEmpty()) *temp = std::stof(tokens[3].c_str());
+        if (line_num && !tokens[0].isEmpty()) *line_num = std::stoi(tokens[0].c_str());
+        if (temp && !tokens[3].isEmpty()) *temp = std::stof(tokens[3].c_str());
         
         // 时间信息
-        if (!tokens[4].isEmpty() && !tokens[5].isEmpty()) {
+        if (time_str && !tokens[4].isEmpty() && !tokens[5].isEmpty()) {
             *time_str = tokens[4] + " " + tokens[5];
         }
 
         // LBJ数据转换
-        if (!tokens[6].isEmpty()) lbj->type = (int8_t) std::stoi(tokens[6].c_str());
-        if (!tokens[7].isEmpty()) tokens[7].toCharArray(lbj->train, sizeof lbj->train);
-        if (!tokens[8].isEmpty()) lbj->direction = (int8_t) std::stoi(tokens[8].c_str());
-        if (!tokens[9].isEmpty()) tokens[9].toCharArray(lbj->speed, sizeof lbj->speed);
-        if (!tokens[10].isEmpty()) tokens[10].toCharArray(lbj->position, sizeof lbj->position);
-        if (!tokens[11].isEmpty()) tokens[11].toCharArray(lbj->time, sizeof lbj->time);
-        if (!tokens[12].isEmpty()) lbj->info2_hex = tokens[12];
-        if (!tokens[13].isEmpty()) lbj->loco_type = tokens[13];
+        if (lbj) {
+            if (!tokens[6].isEmpty()) lbj->type = (int8_t) std::stoi(tokens[6].c_str());
+            if (!tokens[7].isEmpty()) strncpy(lbj->train, tokens[7].c_str(), sizeof(lbj->train) - 1); lbj->train[sizeof(lbj->train) - 1] = '\0';
+            if (!tokens[8].isEmpty()) lbj->direction = (int8_t) std::stoi(tokens[8].c_str());
+            if (!tokens[9].isEmpty()) strncpy(lbj->speed, tokens[9].c_str(), sizeof(lbj->speed) - 1); lbj->speed[sizeof(lbj->speed) - 1] = '\0';
+            if (!tokens[10].isEmpty()) strncpy(lbj->position, tokens[10].c_str(), sizeof(lbj->position) - 1); lbj->position[sizeof(lbj->position) - 1] = '\0';
+            if (!tokens[11].isEmpty()) strncpy(lbj->time, tokens[11].c_str(), sizeof(lbj->time) - 1); lbj->time[sizeof(lbj->time) - 1] = '\0';
+            if (!tokens[12].isEmpty()) lbj->info2_hex = tokens[12];
+            if (!tokens[13].isEmpty()) lbj->loco_type = tokens[13];
+
+            if (!tokens[14].isEmpty()) strncpy(lbj->lbj_class, tokens[14].c_str(), sizeof(lbj->lbj_class) - 1); lbj->lbj_class[sizeof(lbj->lbj_class) - 1] = '\0';
+            if (!tokens[15].isEmpty()) strncpy(lbj->loco, tokens[15].c_str(), sizeof(lbj->loco) - 1); lbj->loco[sizeof(lbj->loco) - 1] = '\0';
+            if (!tokens[16].isEmpty()) strncpy(lbj->route, tokens[16].c_str(), sizeof(lbj->route) - 1); lbj->route[sizeof(lbj->route) - 1] = '\0';
+            if (!tokens[17].isEmpty()) strncpy(lbj->route_utf8, tokens[17].c_str(), sizeof(lbj->route_utf8) - 1); lbj->route_utf8[sizeof(lbj->route_utf8) - 1] = '\0';
+            if (!tokens[18].isEmpty()) strncpy(lbj->pos_lon_deg, tokens[18].c_str(), sizeof(lbj->pos_lon_deg) - 1); lbj->pos_lon_deg[sizeof(lbj->pos_lon_deg) - 1] = '\0';
+            if (!tokens[19].isEmpty()) strncpy(lbj->pos_lon_min, tokens[19].c_str(), sizeof(lbj->pos_lon_min) - 1); lbj->pos_lon_min[sizeof(lbj->pos_lon_min) - 1] = '\0';
+            if (!tokens[20].isEmpty()) strncpy(lbj->pos_lat_deg, tokens[20].c_str(), sizeof(lbj->pos_lat_deg) - 1); lbj->pos_lat_deg[sizeof(lbj->pos_lat_deg) - 1] = '\0';
+            if (!tokens[21].isEmpty()) strncpy(lbj->pos_lat_min, tokens[21].c_str(), sizeof(lbj->pos_lat_min) - 1); lbj->pos_lat_min[sizeof(lbj->pos_lat_min) - 1] = '\0';
+            if (!tokens[22].isEmpty()) strncpy(lbj->pos_lon, tokens[22].c_str(), sizeof(lbj->pos_lon) - 1); lbj->pos_lon[sizeof(lbj->pos_lon) - 1] = '\0';
+            if (!tokens[23].isEmpty()) strncpy(lbj->pos_lat, tokens[23].c_str(), sizeof(lbj->pos_lat) - 1); lbj->pos_lat[sizeof(lbj->pos_lat) - 1] = '\0';
+            if (!tokens[28].isEmpty()) lbj->epi = tokens[28];
+        }
+
+        if (rx) {
+            if (!tokens[24].isEmpty()) rx->rssi = std::stof(tokens[24].c_str());
+            if (!tokens[25].isEmpty()) rx->fer = std::stof(tokens[25].c_str());
+            if (!tokens[26].isEmpty()) rx->ppm = std::stof(tokens[26].c_str());
+        }
+        
+        if (id && !tokens[27].isEmpty()) *id = std::stoul(tokens[27].c_str());
 
     } catch (const std::exception& e) {
         Serial.printf("[NVS] Data conversion error: %s\n", e.what());
         return false;
     }
 
-    // sprintf(buffer, "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,", lbj.lbj_class, lbj.loco, lbj.route, lbj.route_utf8,
-    //         lbj.pos_lon_deg, lbj.pos_lon_min, lbj.pos_lat_deg, lbj.pos_lat_min, lbj.pos_lon, lbj.pos_lat);
-        // 继续LBJ数据转换
-        if (!tokens[14].isEmpty()) tokens[14].toCharArray(lbj->lbj_class, sizeof lbj->lbj_class);
-        if (!tokens[15].isEmpty()) tokens[15].toCharArray(lbj->loco, sizeof lbj->loco);
-        if (!tokens[16].isEmpty()) tokens[16].toCharArray(lbj->route, sizeof lbj->route);
-        if (!tokens[17].isEmpty()) tokens[17].toCharArray(lbj->route_utf8, sizeof lbj->route_utf8);
-        if (!tokens[18].isEmpty()) tokens[18].toCharArray(lbj->pos_lon_deg, sizeof lbj->pos_lon_deg);
-        if (!tokens[19].isEmpty()) tokens[19].toCharArray(lbj->pos_lon_min, sizeof lbj->pos_lon_min);
-        if (!tokens[20].isEmpty()) tokens[20].toCharArray(lbj->pos_lat_deg, sizeof lbj->pos_lat_deg);
-        if (!tokens[21].isEmpty()) tokens[21].toCharArray(lbj->pos_lat_min, sizeof lbj->pos_lat_min);
-        if (!tokens[22].isEmpty()) tokens[22].toCharArray(lbj->pos_lon, sizeof lbj->pos_lon);
-        if (!tokens[23].isEmpty()) tokens[23].toCharArray(lbj->pos_lat, sizeof lbj->pos_lat);
-
-        // 接收信息转换
-        if (!tokens[24].isEmpty()) rx->rssi = std::stof(tokens[24].c_str());
-        if (!tokens[25].isEmpty()) rx->fer = std::stof(tokens[25].c_str());
-        if (!tokens[26].isEmpty()) rx->ppm = std::stof(tokens[26].c_str());
-        if (!tokens[27].isEmpty()) *id = std::stoul(tokens[27].c_str());
-        if (!tokens[28].isEmpty()) lbj->epi = tokens[28];
-
-        // 打印调试信息
+    if (rx) {
         Serial.printf("[NVS] Data retrieved successfully: line=%d, rssi=%.2f, fer=%.2f, ppm=%.2f\n",
-                     ret_lines, rx->rssi, rx->fer, rx->ppm);
-        return true;
+                    ret_lines, rx->rssi, rx->fer, rx->ppm);
+    } else {
+        Serial.printf("[NVS] Data retrieved successfully: line=%d\n", ret_lines);
+    }
+    return true;
 }
 
 bool aPreferences::clearKeys() {
@@ -309,3 +314,89 @@ void aPreferences::setRetLines(int32_t line) {
     ret_lines = line;
 }
 
+bool aPreferences::clearData() {
+    if (!have_pref)
+        return false;
+    // 清除所有存储数据
+    bool success = clearKeys();
+    if (success) {
+        write_count = 0;
+        error_count = 0;
+    }
+    return success;
+}
+
+uint32_t aPreferences::getTotalSpace() {
+    nvs_stats_t stats;
+    if (nvs_get_stats(partition_name, &stats) != ESP_OK) {
+        Serial.println("[NVS] 获取存储统计失败");
+        return 0;
+    }
+    // 每个条目假设平均100字节
+    return stats.total_entries * 100;
+}
+
+uint32_t aPreferences::getUsedSpace() {
+    nvs_stats_t stats;
+    if (nvs_get_stats(partition_name, &stats) != ESP_OK) {
+        Serial.println("[NVS] 获取存储统计失败");
+        return 0;
+    }
+    // 每个条目假设平均100字节
+    return stats.used_entries * 100;
+}
+
+uint32_t aPreferences::getFileCount() {
+    // 返回已保存的数据记录数
+    return lines;
+}
+
+uint32_t aPreferences::getWriteCount() {
+    return write_count;
+}
+
+uint32_t aPreferences::getErrorCount() {
+    return error_count;
+}
+
+uint8_t aPreferences::getStorageHealth() {
+    nvs_stats_t stats;
+    if (nvs_get_stats(partition_name, &stats) != ESP_OK) {
+        return 0;
+    }
+    
+    // 计算健康度
+    uint8_t health = 100;
+    
+    // 根据使用率降低健康度
+    float usage_percent = (float)stats.used_entries / stats.total_entries * 100;
+    if (usage_percent > 90) {
+        health -= 30;
+    } else if (usage_percent > 80) {
+        health -= 20;
+    } else if (usage_percent > 70) {
+        health -= 10;
+    }
+    
+    // 根据错误率降低健康度
+    if (write_count > 0) {
+        float error_rate = (float)error_count / write_count * 100;
+        if (error_rate > 5) {
+            health -= 30;
+        } else if (error_rate > 2) {
+            health -= 20;
+        } else if (error_rate > 1) {
+            health -= 10;
+        }
+    }
+    
+    return health;
+}
+
+uint32_t aPreferences::getStorageLimit() {
+    return storage_limit;
+}
+
+void aPreferences::setStorageLimit(uint32_t limit) {
+    storage_limit = limit;
+}
