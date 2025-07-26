@@ -362,29 +362,36 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                      * 'X' indicates BCH correction failed code words.
                      */
                     if (p[i].str.length() >= 5 && p[i].str[0] != 'X') {
-                        for (size_t c = 0; c < 5; c++) {
+                        for (size_t c = 0; c < 5 && c < sizeof(l->train) - 1; c++) {
                             l->train[c] = p[i].str[c];
                         }
+                        l->train[5] = 0;
                     }
-                    if (p[i].str.length() >= 10 && p[i].str[6] != 'X') {
-                        for (size_t c = 6, v = 0; c < 9; c++, v++) {
+                    if (p[i].str.length() >= 9 && p[i].str.length() > 6 && p[i].str[6] != 'X') {
+                        for (size_t c = 6, v = 0; c < 9 && v < sizeof(l->speed) - 1; c++, v++) {
                             l->speed[v] = p[i].str[c];
                         }
                         l->speed[3] = 0;
                     }
-                    if (p[i].str.length() >= 15 && p[i].str[10] != 'X') {
+                    if (p[i].str.length() >= 15 && p[i].str.length() > 10 && p[i].str[10] != 'X') {
                         size_t v = 0;
-                        for (size_t c = 10; c < 15; c++, v++) {
+                        for (size_t c = 10; c < 15 && v < sizeof(l->position) - 2; c++, v++) {
                             l->position[v] = p[i].str[c];
                             if (c == 13 && p[i].str[c] != ' ') {
-                                l->position[++v] = '.';
+                                if (v + 1 < sizeof(l->position) - 1) {
+                                    l->position[++v] = '.';
+                                }
                             } else if (c == 13) {
                                 // 0.x km is better than .x km, isn't it?
                                 l->position[v] = '0';
-                                l->position[++v] = '.';
+                                if (v + 1 < sizeof(l->position) - 1) {
+                                    l->position[++v] = '.';
+                                }
                             }
                         }
-                        l->position[v] = 0;
+                        if (v < sizeof(l->position)) {
+                            l->position[v] = 0;
+                        }
                     }
                     for (int j = 2; j < p[i].epi.length(); j += 2) {
                         if (j > 6 || p[i].epi[j + 1] != 'm' && p[i].epi[j + 1] != 'u')
@@ -457,13 +464,13 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                 }
 
                 // locomotive registry number.
-                if (buffer.length() >= 12 && buffer[4] != 'X' && buffer[5] != 'X' && buffer[10] != 'X') {
-                    //fixme: buffer.length() seems cause crash occasionally, inspect later.
-                    for (size_t c = 4, v = 0; c < 12; c++, v++) {
+                if (buffer.length() >= 12 && buffer.length() > 10 && buffer[4] != 'X' && buffer[5] != 'X' && buffer[10] != 'X') {
+                    for (size_t c = 4, v = 0; c < 12 && v < sizeof(l->loco) - 1; c++, v++) {
                         l->loco[v] = buffer[c];
                     }
+                    l->loco[sizeof(l->loco) - 1] = 0;
                     String type;
-                    for (size_t c = 0; c < 3; c++) {
+                    for (size_t c = 0; c < 3 && c < sizeof(l->loco) - 1; c++) {
                         if (isdigit(l->loco[c]))
                             type += l->loco[c];
                     }
@@ -473,69 +480,80 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                 }
 
                 // positions lon
-                if (buffer.length() >= 39 && buffer[30] != 'X' && buffer[35] != 'X') {
-                    for (size_t c = 30, v = 0; c < 39; c++, v++) {
+                if (buffer.length() >= 39 && buffer.length() > 35 && buffer[30] != 'X' && buffer[35] != 'X') {
+                    for (size_t c = 30, v = 0; c < 39 && v < sizeof(l->pos_lon) - 1; c++, v++) {
                         l->pos_lon[v] = buffer[c];
                     }
-                    for (size_t c = 30, v = 0; c < 33; c++, v++) {
+                    l->pos_lon[sizeof(l->pos_lon) - 1] = 0;
+                    for (size_t c = 30, v = 0; c < 33 && v < sizeof(l->pos_lon_deg) - 1; c++, v++) {
                         l->pos_lon_deg[v] = buffer[c];
                     }
+                    l->pos_lon_deg[sizeof(l->pos_lon_deg) - 1] = 0;
                     size_t v = 0;
-                    for (size_t c = 33; c < 39; c++, v++) {
+                    for (size_t c = 33; c < 39 && v < sizeof(l->pos_lon_min) - 2; c++, v++) {
                         l->pos_lon_min[v] = buffer[c];
-                        if (c == 34)
+                        if (c == 34 && v + 1 < sizeof(l->pos_lon_min) - 1)
                             l->pos_lon_min[++v] = '.';
+                    }
+                    if (v < sizeof(l->pos_lon_min)) {
+                        l->pos_lon_min[v] = 0;
                     }
                 }
                 // position lat
-                if (buffer.length() >= 47 && buffer[39] != 'X' && buffer[40] != 'X' && buffer[45] != 'X') {
-                    for (size_t c = 39, v = 0; c < 47; c++, v++) {
+                if (buffer.length() >= 47 && buffer.length() > 45 && buffer[39] != 'X' && buffer[40] != 'X' && buffer[45] != 'X') {
+                    for (size_t c = 39, v = 0; c < 47 && v < sizeof(l->pos_lat) - 1; c++, v++) {
                         l->pos_lat[v] = buffer[c];
                     }
-                    for (size_t c = 39, v = 0; c < 41; c++, v++) {
+                    l->pos_lat[sizeof(l->pos_lat) - 1] = 0;
+                    for (size_t c = 39, v = 0; c < 41 && v < sizeof(l->pos_lat_deg) - 1; c++, v++) {
                         l->pos_lat_deg[v] = buffer[c];
                     }
+                    l->pos_lat_deg[sizeof(l->pos_lat_deg) - 1] = 0;
                     size_t v = 0;
-                    for (size_t c = 41; c < 47; c++, v++) {
+                    for (size_t c = 41; c < 47 && v < sizeof(l->pos_lat_min) - 2; c++, v++) {
                         l->pos_lat_min[v] = buffer[c];
-                        if (c == 42)
+                        if (c == 42 && v + 1 < sizeof(l->pos_lat_min) - 1)
                             l->pos_lat_min[++v] = '.';
+                    }
+                    if (v < sizeof(l->pos_lat_min)) {
+                        l->pos_lat_min[v] = 0;
                     }
                 }
 
                 // BCD to HEX and to ASCII for class
-                if (l->info2_hex.length() >= 4 && l->info2_hex[0] != 'X') {
+                if (l->info2_hex.length() >= 4 && l->info2_hex.length() > 0 && l->info2_hex[0] != 'X') {
                     // this is very likely the most ugly code I've ever written, I apologize for that.
                     size_t c = 0;
-                    for (size_t v = 0; v < 3; v++, c++) {
+                    for (size_t v = 0; v < 3 && v + 1 < l->info2_hex.length() && c < sizeof(l->lbj_class) - 1; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
                         if (ch > 0x1F && ch < 0x7F && ch != 0x22 && ch != 0x2C)
                             l->lbj_class[c] = ch;
                     }
+                    l->lbj_class[sizeof(l->lbj_class) - 1] = 0;
                 }
                 // to GB2312 for route.
-                if (l->info2_hex.length() >= 20 && l->info2_hex[14] != 'X' && l->info2_hex[15] != 'X') { // Character 1
+                if (l->info2_hex.length() >= 20 && l->info2_hex.length() > 15 && l->info2_hex[14] != 'X' && l->info2_hex[15] != 'X') { // Character 1
                     size_t c = 0;
-                    for (size_t v = 14; v < 17; v++, c++) {
+                    for (size_t v = 14; v < 17 && v + 1 < l->info2_hex.length() && c < sizeof(l->route) - 1; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
                         if ((uint8_t) ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
                             l->route[c] = ch;
                     }
                 }
-                if (l->info2_hex.length() >= 25 && l->info2_hex[18] != 'X' && l->info2_hex[20] != 'X') {// Character 2
+                if (l->info2_hex.length() >= 25 && l->info2_hex.length() > 20 && l->info2_hex[18] != 'X' && l->info2_hex[20] != 'X') {// Character 2
                     size_t c = 2;
-                    for (size_t v = 18; v < 21; v++, c++) {
+                    for (size_t v = 18; v < 21 && v + 1 < l->info2_hex.length() && c < sizeof(l->route) - 1; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
                         if ((uint8_t) ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
                             l->route[c] = ch;
                     }
                 }
-                if (l->info2_hex.length() >= 30 && l->info2_hex[22] != 'X' && l->info2_hex[25] != 'X') {// Character 3,4
+                if (l->info2_hex.length() >= 30 && l->info2_hex.length() > 25 && l->info2_hex[22] != 'X' && l->info2_hex[25] != 'X') {// Character 3,4
                     size_t c = 4;
-                    for (size_t v = 22; v < 29; v++, c++) {
+                    for (size_t v = 22; v < 29 && v + 1 < l->info2_hex.length() && c < sizeof(l->route) - 1; v++, c++) {
                         int8_t ch = hexToChar(l->info2_hex[v], l->info2_hex[v + 1]);
                         ++v;
                         if ((uint8_t) ch >= 0xA0 || ch == 0x20 || ch >= 0x2D && ch <= 0x7E && ch != 0x60)
@@ -548,14 +566,15 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
             case LBJ_SYNC_ADDR: {
                 lbj_sync:
                 l->type = 2;
-                if (p[i].str.length() >= 5 && p[i].str[0] != 'X') {
-                    for (size_t c = 1, v = 0; c < 5; c++, v++) {
+                if (p[i].str.length() >= 5 && p[i].str.length() > 0 && p[i].str[0] != 'X') {
+                    for (size_t c = 1, v = 0; c < 5 && v < sizeof(l->time) - 2; c++, v++) {
                         l->time[v] = p[i].str[c];
-                        if (c == 2)
+                        if (c == 2 && v + 1 < sizeof(l->time) - 1)
                             l->time[++v] = ':';
                     }
+                    l->time[sizeof(l->time) - 1] = 0;
                 }
-                if (p[i].epi.length() >= 4 && p[i].epi[3] == 'm') {
+                if (p[i].epi.length() >= 4 && p[i].epi.length() > 3 && p[i].epi[3] == 'm') {
                     l->epi = p[i].epi.substring(2, 3);
                 }
                 break;

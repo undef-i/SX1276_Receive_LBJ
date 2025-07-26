@@ -3,33 +3,7 @@
 #include "BCH3121.hpp"
 #include "networks.hpp"
 
-bool fixBCH(uint32_t &cw, CBCH3121 &bch, uint16_t &err) {
-    //todo: this function is useless, it's highly unlikely to fix message like this. Delete this function to save time.
-    bool p_check = true;
-    uint16_t err_last = err;
-    uint32_t cw_last = cw;
-    if (bch.decode(cw, err, p_check) && p_check) {
-        // Serial.printf("[D] NCorr\n");
-        return true;
-    }
-    //uint16_t err;
-    cw = cw_last;
-    for (int i = 1; i < 11; ++i) {
-        err = 0;
-        uint32_t mask = 1 << i;
-        cw ^= mask;
-        if (bch.decode(cw, err, p_check) && p_check) {
-            err += err_last;
-            Serial.printf("[D] Correction Success!\n");
-            sd1.append("[D] Correction Success!\n");
-            return true;
-        }
-        cw = cw_last;
-    }
-    err += err_last;
-    // Serial.printf("[D] Correction Failed. err %d\n", err);
-    return false;
-}
+// bool fixBCH(uint32_t &cw, CBCH3121 &bch, uint16_t &err) { ... }
 
 int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len) {
     int16_t state = RADIOLIB_ERR_NONE;
@@ -53,12 +27,11 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
 #if defined(RADIOLIB_STATIC_ONLY)
         uint8_t data[RADIOLIB_STATIC_ARRAY_SIZE + 1];
 #else
-        // auto *data = new uint8_t[len + 1];
-        // if (!data) {
-        //     return (RADIOLIB_ERR_MEMORY_ALLOCATION_FAILED);
-        // }
-#endif
+        if (len > 8192) { 
+            return (RADIOLIB_ERR_MEMORY_ALLOCATION_FAILED);
+        }
         uint8_t data[len + 1];
+#endif
 
         state = readDataMA(data, &length, &p[i].addr, &p[i].func, &framePos, &addr_next, &p[i].is_empty,
                            &complete, &p[i].errs_total, &p[i].errs_uncorrected, &p[i].epi);

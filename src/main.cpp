@@ -124,6 +124,9 @@ struct rx_info rxInfo;
 struct data_bond *db = nullptr;
 bool always_new = true;
 struct lbj_data current_lbj_data;  // 当前显示的列车数据
+
+// 互斥锁保护共享数据
+SemaphoreHandle_t data_mutex = nullptr;
 // PagerClient::pocsag_data *pd = nullptr;
 //endregion
 
@@ -519,31 +522,50 @@ void handleBleConnections() {
         return;
     }
     
-    // 处理断开连接的情况
-    // 处理断开连接的情况
     if (!deviceConnected && oldDeviceConnected) {
+        Serial.println("[BLE] Device disconnected, reinitializing BLE service");
+        
         try {
             if (pServer != nullptr) {
-                if (pTxCharacteristic != nullptr) {
-                    pTxCharacteristic->setValue(""); // 重置特征值
+                BLEAdvertising *pAdvertising = pServer->getAdvertising();
+                if (pAdvertising != nullptr) {
+                    pAdvertising->stop();
+                    Serial.println("[BLE] Stopped advertising");
                 }
-                pServer->startAdvertising();
-                Serial.println("[BLE] Restarting advertising");
+                
+                delay(100);
+                
+                if (pTxCharacteristic != nullptr) {
+                    pTxCharacteristic->setValue("");
+                }
+                
+                pAdvertising = pServer->getAdvertising();
+                pAdvertising->addServiceUUID(SERVICE_UUID);
+                pAdvertising->setScanResponse(true);
+                pAdvertising->setMinPreferred(0x06);
+                pAdvertising->setMaxPreferred(0x12);
+                pAdvertising->setMinInterval(0x20);
+                pAdvertising->setMaxInterval(0x40);
+                
+                pAdvertising->start();
+                Serial.println("[BLE] Restarted advertising after disconnect");
             }
+        } catch (const std::exception& e) {
+            Serial.printf("[BLE] Exception during reconnection: %s\n", e.what());
         } catch (...) {
-            Serial.println("[BLE] Error occurred when restarting advertising");
+            Serial.println("[BLE] Unknown error during reconnection");
         }
+        
         oldDeviceConnected = deviceConnected;
     }
     
-    // 处理新连接的情况
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
         if (pTxCharacteristic != nullptr) {
             pTxCharacteristic->setValue("LBJ Train Warning Ready");
             pTxCharacteristic->notify();
         }
-        Serial.println("[BLE] New device connected");
+        Serial.println("[BLE] New device connected successfully");
     }
 }
 //endregion
@@ -552,6 +574,13 @@ void handleBleConnections() {
 void setup() {
     runtime_timer = millis64();
     initBoard();
+    
+    // 初始化互斥锁
+    data_mutex = xSemaphoreCreateMutex();
+    if (data_mutex == nullptr) {
+        Serial.println("[ERROR] Failed to create data mutex!");
+        while(true); // 停止执行
+    }
 
     // 初始化NVS
     esp_err_t err = nvs_flash_init();
@@ -677,16 +706,19 @@ void handleSync() {
         //     bandwidth_altered = true;
         // }
 //        sd1.append("[PGR][DEBUG] SYNC DETECTED.\n");
-        if (rxInfo.cnt < 5 && (rxInfo.timer == 0 || esp_timer_get_time() - rxInfo.timer < 11000)) {
-            float rssi = radio.getRSSI(false, true);
-            rxInfo.timer = esp_timer_get_time();
-            // rxInfo.rssi += rssi;
-            rssi_cache += rssi;
-            rxInfo.cnt++;
-            Serial.printf("[D] RXI %.2f\n", rssi_cache / (float) rxInfo.cnt);
+        if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            if (rxInfo.cnt < 5 && (rxInfo.timer == 0 || esp_timer_get_time() - rxInfo.timer < 11000)) {
+                float rssi = radio.getRSSI(false, true);
+                rxInfo.timer = esp_timer_get_time();
+                // rxInfo.rssi += rssi;
+                rssi_cache += rssi;
+                rxInfo.cnt++;
+                Serial.printf("[D] RXI %.2f\n", rssi_cache / (float) rxInfo.cnt);
+            }
+            if (rxInfo.fer == 0)
+                rxInfo.fer = radio.getFrequencyError();
+            xSemaphoreGive(data_mutex);
         }
-        if (rxInfo.fer == 0)
-            rxInfo.fer = radio.getFrequencyError();
     }
 }
 
@@ -744,7 +776,12 @@ void loop() {
 #endif
     // freqCorrection();
     // Handle carrier timout.
-    if (car_timer != 0 && millis64() - car_timer > 700 && prb_timer == 0 && rxInfo.timer == 0) {
+    bool rxInfo_timer_zero = false;
+    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        rxInfo_timer_zero = (rxInfo.timer == 0);
+        xSemaphoreGive(data_mutex);
+    }
+    if (car_timer != 0 && millis64() - car_timer > 700 && prb_timer == 0 && rxInfo_timer_zero) {
         car_count = 0;
         revertFrequency();
         car_fer_last = 0;
@@ -753,7 +790,11 @@ void loop() {
     }
 
     // Handle preamble timeout.
-    if (prb_timer != 0 && millis64() - prb_timer > 600 && rxInfo.timer == 0) {
+    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        rxInfo_timer_zero = (rxInfo.timer == 0);
+        xSemaphoreGive(data_mutex);
+    }
+    if (prb_timer != 0 && millis64() - prb_timer > 600 && rxInfo_timer_zero) {
         prb_count = 0;
         revertFrequency();
         for (auto &i: fers) {
@@ -868,6 +909,11 @@ void loop() {
     handleCarrier();
     handlePreamble();
 
+    // 处理BLE连接状态
+    if (ble_enabled) {
+        handleBleConnections();
+    }
+
     handleSync();
 
     // the number of batches to wait for
@@ -878,10 +924,13 @@ void loop() {
         runtime_timer = millis64();
         timer4 = millis64();
         int state = pager.readDataMSA(db->pocsagData, 0);
-        rxInfo.rssi = rssi_cache / (float) rxInfo.cnt;
-        rssi_cache = 0;
-        rxInfo.cnt = 0;
-        rxInfo.timer = 0;
+        if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            rxInfo.rssi = rssi_cache / (float) rxInfo.cnt;
+            rssi_cache = 0;
+            rxInfo.cnt = 0;
+            rxInfo.timer = 0;
+            xSemaphoreGive(data_mutex);
+        }
         prb_timer = 0;
         car_timer = 0;
         // radio.setRxBandwidth(20.8);
@@ -897,8 +946,12 @@ void loop() {
         Serial.printf("[D] Car_count %d\n", car_count);
         if (prb_count >= 32)
             prb_count = 31;
-        if (prb_count > 0)
-            rxInfo.fer = fers[prb_count - 1];
+        if (prb_count > 0) {
+            if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                rxInfo.fer = fers[prb_count - 1];
+                xSemaphoreGive(data_mutex);
+            }
+        }
         for (int i = 0; i < prb_count; ++i) {
             Serial.printf("[D] Fer %.2f Hz\n", fers[i]);
             fers[i] = 0;
@@ -908,7 +961,10 @@ void loop() {
         prb_count = 0;
         car_count = 0;
         car_fer_last = 0;
-        rxInfo.ppm = getBias(actual_frequency);
+        if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            rxInfo.ppm = getBias(actual_frequency);
+            xSemaphoreGive(data_mutex);
+        }
 
         Serial.println(F("[Pager] Received pager data, decoding ... "));
         sd1.append(2, "正在解码信号...\n");
@@ -957,12 +1013,16 @@ void loop() {
                     fd_state = TASK_CREATE_FAILED;
                     simpleFormatTask();
                     analogWrite(BOARD_LED, LED_OFF);
+                    delete db;
+                    db = nullptr;
                 }
             } else {
                 dualPrintf(true, "[Pager] Failed to create format task, errcode %d\n", x_ret);
                 sd1.append("[Pager] Failed to create format task, errcode %d\n", x_ret);
                 fd_state = TASK_CREATE_FAILED;
                 analogWrite(BOARD_LED, LED_OFF);
+                delete db;
+                db = nullptr;
             }
 
         } else if (state == RADIOLIB_ERR_MSG_CORRUPT) {
@@ -1329,9 +1389,12 @@ void handleSerialInput() {
 void initFmtVars() {
     Serial.printf("[Pager] Processing time %llu ms.\n", millis64() - runtime_timer);
     runtime_timer = 0;
-    rxInfo.rssi = 0;
-    rxInfo.fer = 0;
-    rxInfo.ppm = 0;
+    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        rxInfo.rssi = 0;
+        rxInfo.fer = 0;
+        rxInfo.ppm = 0;
+        xSemaphoreGive(data_mutex);
+    }
     // prb_count = 0;
     // for (auto &i: fers) {
     //     i = 0;
@@ -1373,6 +1436,8 @@ void formatDataTask(void *pVoid) {
     if (empty) {
         fd_state = TASK_DONE;
         task_fd = nullptr;
+        delete db;
+        db = nullptr;
         vTaskDelete(nullptr);
         Serial.println("[D] Empty message");
         return;
@@ -1384,6 +1449,12 @@ void formatDataTask(void *pVoid) {
     Serial.printf("[D-LEPI][%s]\n", db->lbjData.epi.c_str());
 
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
+    
+    // 更新当前显示的列车数据，用于补发功能
+    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        current_lbj_data = db->lbjData;
+        xSemaphoreGive(data_mutex);
+    }
     
     // 保存数据到内部存储
     float temp = 0;
@@ -1415,6 +1486,8 @@ void formatDataTask(void *pVoid) {
 
     fd_state = TASK_DONE;
     task_fd = nullptr;
+    delete db;
+    db = nullptr;
     vTaskDelete(nullptr);
 }
 
@@ -1436,9 +1509,17 @@ void simpleFormatTask() { // only output initially phrased data in case of memor
     }
 #endif
     readDataLBJ(db->pocsagData, &db->lbjData);
+    // 更新当前显示的列车数据，用于补发功能
+    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        current_lbj_data = db->lbjData;
+        xSemaphoreGive(data_mutex);
+    }
     flash.append(db->lbjData, rxInfo, battery.readVoltage() * 2, temp);
     
     // pword(db->str.c_str(),20,50);
     oled.showSTR(db->str);
+    
+    delete db;
+    db = nullptr;
 }
 // END OF FILE.

@@ -284,7 +284,8 @@ void Menu::acknowledge() {
         return;
     }
     extern struct lbj_data current_lbj_data;
-    extern struct rx_info rxInfo;
+extern struct rx_info rxInfo;
+extern SemaphoreHandle_t data_mutex;
     extern void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest);
     
     switch (menu_page) {
@@ -408,7 +409,10 @@ void Menu::acknowledge() {
         case MENU_RX_INFO:
             // 通过蓝牙重发当前条目
             showMessage("信息", "正在通过蓝牙补发...");
-            sendTrainDataOverBLE(current_lbj_data, rxInfo, false);
+            if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        sendTrainDataOverBLE(current_lbj_data, rxInfo, false);
+        xSemaphoreGive(data_mutex);
+    }
             showMessage("信息", "补发完成");
             delay(1000);
             showInfo((int8_t)sub_page);

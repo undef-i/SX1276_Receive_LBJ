@@ -632,6 +632,14 @@ void ScreenWrapper::showSelectedLBJ(aPreferences *flash_cls, int8_t bias) {
     uint32_t id;
     float temp;
     if (flash_cls->retrieve(&lbj, &rx, &rx_time, &line, &id, &temp, bias)) {
+        extern struct lbj_data current_lbj_data;
+extern struct rx_info rxInfo;
+extern SemaphoreHandle_t data_mutex;
+if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    current_lbj_data = lbj;
+    rxInfo = rx;
+    xSemaphoreGive(data_mutex);
+}
         showLBJ(lbj, rx, rx_time, line, id, temp);
     }
 }
