@@ -145,6 +145,7 @@
 
 #define INITIAL_PPM                 6
 #define AFC_ENABLE                  true
+// #define USE_SMARTCONFIG
 
 #elif defined(LILYGO_T3_V2_0)
 #define I2C_SDA                     21
