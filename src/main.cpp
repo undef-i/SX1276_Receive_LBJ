@@ -86,6 +86,9 @@ bool deviceConnected = false;
 bool oldDeviceConnected = false;
 uint64_t ble_timer = 0;
 
+struct lbj_data current_lbj_data;
+SemaphoreHandle_t data_mutex = nullptr;
+
 void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest = false);
 void readCsvAndSendBLE();
 
@@ -726,7 +729,7 @@ void initBLE() {
     }
     
     try {
-        pTxCharacteristic->setValue("LBJ Train Warning Ready");
+        pTxCharacteristic->setValue("LBJ Ready");
         Serial.println("[BLE] TX characteristic value set to initial message");
     } catch (...) {
         Serial.println("[BLE] Error setting TX characteristic value");
@@ -815,6 +818,12 @@ void setup() {
     if (!no_sd) {
         sd1.setFS(SD);
         delay(150);
+    }
+    
+    data_mutex = xSemaphoreCreateMutex();
+    if (data_mutex == nullptr) {
+        Serial.println("[ERROR] Failed to create data mutex!");
+        while(true);
     }
 
     // Configure time sync.
@@ -1021,21 +1030,49 @@ void handleBleConnections() {
     }
     
     if (!deviceConnected && oldDeviceConnected) {
-        delay(500);
+        Serial.println("[BLE] Device disconnected, reinitializing BLE service");
+        
         try {
-            if (pServer != nullptr) { 
-                pServer->startAdvertising();
-                Serial.println("[BLE] BLE resumed broadcasting");
+            if (pServer != nullptr) {
+                BLEAdvertising *pAdvertising = pServer->getAdvertising();
+                if (pAdvertising != nullptr) {
+                    pAdvertising->stop();
+                    Serial.println("[BLE] Stopped advertising");
+                }
+                
+                delay(100);
+                
+                if (pTxCharacteristic != nullptr) {
+                    pTxCharacteristic->setValue("");
+                }
+                
+                pAdvertising = pServer->getAdvertising();
+                pAdvertising->addServiceUUID(SERVICE_UUID);
+                pAdvertising->setScanResponse(true);
+                pAdvertising->setMinPreferred(0x06);
+                pAdvertising->setMaxPreferred(0x12);
+                pAdvertising->setMinInterval(0x20);
+                pAdvertising->setMaxInterval(0x40);
+                
+                pAdvertising->start();
+                Serial.println("[BLE] Restarted advertising after disconnect");
             }
+        } catch (const std::exception& e) {
+            Serial.printf("[BLE] Exception during reconnection: %s\n", e.what());
         } catch (...) {
-            Serial.println("[BLE] Error occurred when restarting broadcasting");
+            Serial.println("[BLE] Unknown error during reconnection");
         }
+        
         oldDeviceConnected = deviceConnected;
     }
     
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
-        Serial.println("[BLE] BLE connection status has been updated"); 
+        if (pTxCharacteristic != nullptr) {
+            pTxCharacteristic->setValue("LBJ Train Warning Ready");
+            pTxCharacteristic->notify();
+        }
+        Serial.println("[BLE] New device connected successfully");
     }
 }
 
@@ -1579,6 +1616,12 @@ void formatDataTask(void *pVoid) {
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
     sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
     
+    // 保护共享数据
+    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        current_lbj_data = db->lbjData;
+        xSemaphoreGive(data_mutex);
+    }
+    
     if (ble_enabled && db != nullptr) {
         try {
             sendTrainDataOverBLE(db->lbjData, rxInfo);
@@ -1627,6 +1670,12 @@ void formatDataTask(void *pVoid) {
     sd1.append(2, "任务堆栈标 %u\n", uxTaskGetStackHighWaterMark(nullptr));
     // sd1.append("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
     sd1.append(2, "格式化输出任务完成，用时[%llu]\n", millis64() - runtime_timer);
+    
+    if (db != nullptr) {
+        delete db;
+        db = nullptr;
+    }
+    
     fd_state = TASK_DONE;
     task_fd = nullptr;
     vTaskDelete(nullptr);
