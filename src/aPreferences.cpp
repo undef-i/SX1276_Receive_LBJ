@@ -202,6 +202,10 @@ void aPreferences::getStats() {
     Serial.printf("[NVS] Current line %d, id %d\n", lines, ids);
 }
 
+uint32_t aPreferences::getID() {
+    return ids;
+}
+
 bool aPreferences::isLatest(int8_t bias) const {
     if (ret_lines == lines + bias)
         return true;

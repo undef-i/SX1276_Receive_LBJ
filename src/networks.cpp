@@ -477,6 +477,9 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                  */
 
                 // reformat to hexadecimal string.
+                if (buffer.length() > 128) {
+                    buffer = buffer.substring(0,128);
+                }
                 for (char &c: buffer) {
                     recodeBCD(&c, &l->info2_hex);
                 }
