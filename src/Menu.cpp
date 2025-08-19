@@ -458,6 +458,8 @@ extern SemaphoreHandle_t data_mutex;
             lines = std::stoi((items[0] + items[1] + items[2] + items[3]).c_str());
             if (lines > PREF_MAX_LINES)
                 lines = PREF_MAX_LINES;
+            if (lines > flash->getID())
+                lines = flash->getID();
             drawDigitIndex(selected_item, false);
             highlightIndex(selected_item);
             menu_page = MENU_INDEX;
