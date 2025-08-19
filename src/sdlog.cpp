@@ -3,6 +3,10 @@
 //
 
 #include "sdlog.hpp"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+static SemaphoreHandle_t sd_mutex = nullptr;
 
 // Initialize static variables.
 // File SD_LOG::log;
@@ -44,7 +48,11 @@ SD_LOG::SD_LOG() :
         is_startline_csv(true),
         size_checked(false),
         log_directory{},
-        csv_directory{} {}
+        csv_directory{} {
+    if (sd_mutex == nullptr) {
+        sd_mutex = xSemaphoreCreateMutex();
+    }
+}
 
 void SD_LOG::setFS(fs::FS &fs) {
     filesys = &fs;
@@ -139,20 +147,29 @@ void SD_LOG::getFilenameCSV(const char *path) {
 }
 
 int SD_LOG::begin(const char *path) {
+    if (sd_mutex == nullptr) {
+        sd_mutex = xSemaphoreCreateMutex();
+    }
+    
+    xSemaphoreTake(sd_mutex, portMAX_DELAY);
     log_directory = path;
     getFilename(path);
-    if (!sd_log)
+    if (!sd_log) {
+        xSemaphoreGive(sd_mutex);
         return -1;
+    }
     log_path = String(String(path) + '/' + filename);
     log = filesys->open(log_path, "a", true);
     if (!log) {
         Serial.println("[SDLOG] Failed to open log file!");
         Serial.println("[SDLOG] Will not write log to SD card.");
         sd_log = false;
+        xSemaphoreGive(sd_mutex);
         return -1;
     }
     writeHeader();
     sd_log = true;
+    xSemaphoreGive(sd_mutex);
     return 0;
 }
 
@@ -195,8 +212,7 @@ void SD_LOG::writeHeader() {
 }
 
 void SD_LOG::writeHeaderCSV() { // TODO: needs more confirmation about title.
-    csv.close();
-    csv = filesys->open(csv_path, "a");
+    xSemaphoreTake(sd_mutex, portMAX_DELAY);
     // Serial.printf("csvfile %s, csv size %d, is_newfile_csv = %d\n",csv.path(),csv.size(),is_newfile_csv);
     if (is_newfile_csv && csv.size() < 200) {
         csv.printf("# ESP32 DEV MODULE CSV FILE %s \n", filename_csv);
@@ -209,9 +225,8 @@ void SD_LOG::writeHeaderCSV() { // TODO: needs more confirmation about title.
         }
         Serial.printf("[SDLOG][D] Writing CSV Headers, is_newfile = %d, filesize = %d\n", is_newfile_csv, csv.size());
     }
-    // csv.flush();
-    csv.close();
-    csv = filesys->open(csv_path, "a");
+    csv.flush();
+    xSemaphoreGive(sd_mutex);
     // Serial.printf("Write hdr end\n");
 }
 
@@ -219,10 +234,14 @@ void SD_LOG::appendCSV(const char *format, ...) { // TODO: maybe implement item 
     if (!sd_csv) {
         return;
     }
+    
+    xSemaphoreTake(sd_mutex, portMAX_DELAY);
+    
     if (!filesys->exists(csv_path)) {
         Serial.println("[SDLOG] CSV file unavailable!");
         sd_csv = false;
         SD.end();
+        xSemaphoreGive(sd_mutex);
         return;
     }
     if (csv.size() >= MAX_CSV_SIZE && !size_checked) {
@@ -249,6 +268,7 @@ void SD_LOG::appendCSV(const char *format, ...) { // TODO: maybe implement item 
         is_startline_csv = true;
     csv.print(buffer);
     csv.flush();
+    xSemaphoreGive(sd_mutex);
 }
 
 void SD_LOG::append(const char *format, ...) {

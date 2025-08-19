@@ -117,7 +117,24 @@ frequency error caused by crystal or the transmitter. This mechanism can be disa
 - `time` Returns system time.
 - `bye` Disconnect from Telnet.
 
-### 4. Reception Failure
+#### Bluetooth
+- `ble on` Enable Bluetooth functionality.
+- `ble off` Disable Bluetooth functionality.
+- `ble reinit` Reinitialize Bluetooth service.
+- `ble status` Display current Bluetooth status and connection state.
+
+### 4. Bluetooth
+
+The device provides Bluetooth Low Energy for transmitting train data to mobile applications. This feature allows users to receive LBJ messages on their mobile devices through a custom application.
+
+For a working Bluetooth client implementation, please refer to [LBJ_Console](https://github.com/undef-i/LBJ_Console) which provides a practical example.
+
+#### Bluetooth Specifications
+- Service UUID: `0000FFE0-0000-1000-8000-00805F9B34FB` (HM-10 compatible)
+- Characteristic UUID: `0000FFE1-0000-1000-8000-00805F9B34FB` (TX characteristic)
+- Device Name: `LBJReceiver`
+
+### 5. Reception Failure
 Sometimes the received messages may be corrupt, partially decoded or wrongly corrected, thus may display unreliable results.
 If `<NUL>`, `NA`, `********` or part of these characters shows up, it means this part of the message is corrupted.
 
@@ -128,6 +145,7 @@ If `<NUL>`, `NA`, `********` or part of these characters shows up, it means this
 - [ESP32-Arduino](https://github.com/espressif/arduino-esp32)
 - [PlatformIO](https://platformio.org/)
 - [ESP32AnalogRead](https://github.com/madhephaestus/ESP32AnalogRead.git) (for battery voltage checking)
+- [ESP32 BLE Arduino](https://github.com/espressif/arduino-esp32/tree/master/libraries/BLE)
 - BCH3121.cpp/.h from [POCSAG_HS](https://github.com/phl0/POCSAG_HS)
 - [LilyGo-LoRa-Series](https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series)
 - [ESPTelnet](https://github.com/LennartHennigs/ESPTelnet)
