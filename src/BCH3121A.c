@@ -127,10 +127,7 @@ int pocsag_brute_repair(uint32_t *data, uint32_t *errors, uint32_t *err_correcte
     {
         int i, n, b1, b2;
         uint32_t res;
-        uint32_t *xpose = 0, *in = 0;
-
-        xpose = malloc(sizeof(uint32_t) * 32);
-        in = malloc(sizeof(uint32_t) * 32);
+        uint32_t xpose[32], in[32];  // 使用栈数组替代动态分配
 
         transpose_clone(*data, xpose);
         for (i = 0; i < 32; ++i)
@@ -155,16 +152,12 @@ int pocsag_brute_repair(uint32_t *data, uint32_t *errors, uint32_t *err_correcte
 //            rx->pocsag_corrected_error_count++;
 //            rx->pocsag_corrected_1bit_error_count++;
             err_corrected++;
-            goto returnfree;
+            return 0;  // 直接返回，避免goto
         }
 
         if (pocsag_error_correction == 1) {
 //            rx->pocsag_uncorrected_error_count++;
 //            verbprintf(6, "Couldn't correct error!\n");
-            if (xpose)
-                free(xpose);
-            if (in)
-                free(in);
             return 1;
         }
 
@@ -199,7 +192,7 @@ int pocsag_brute_repair(uint32_t *data, uint32_t *errors, uint32_t *err_correcte
 //                        rx->pocsag_corrected_error_count++;
 //                        rx->pocsag_corrected_2bit_error_count++;
                         err_corrected++;
-                        goto returnfree;
+                        return 0;  // 直接返回
                     }
 
                     transpose_clone(*data, xpose);
@@ -230,23 +223,12 @@ int pocsag_brute_repair(uint32_t *data, uint32_t *errors, uint32_t *err_correcte
 //                rx->pocsag_corrected_error_count++;
 //                rx->pocsag_corrected_2bit_error_count++;
                 err_corrected++;
-                goto returnfree;
+                return 0;  // 直接返回
             }
         }
 
 //        rx->pocsag_uncorrected_error_count++;
 //        verbprintf(6, "Couldn't correct error!\n");
-        if (xpose)
-            free(xpose);
-        if (in)
-            free(in);
-        return 1;
-
-        returnfree:
-        if (xpose)
-            free(xpose);
-        if (in)
-            free(in);
-        return 0;
+        return 1;  // 无法纠正错误
     }
 }

@@ -3,6 +3,10 @@
 //
 
 #include "sdlog.hpp"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+static SemaphoreHandle_t sd_mutex = nullptr;
 
 // Initialize static variables.
 // File SD_LOG::log;
@@ -44,7 +48,11 @@ SD_LOG::SD_LOG() :
         is_startline_csv(true),
         size_checked(false),
         log_directory{},
-        csv_directory{} {}
+        csv_directory{} {
+    if (sd_mutex == nullptr) {
+        sd_mutex = xSemaphoreCreateMutex();
+    }
+}
 
 void SD_LOG::setFS(fs::FS &fs) {
     filesys = &fs;
@@ -75,10 +83,13 @@ void SD_LOG::getFilename(const char *path) {
     //     counter++;
     // }
     sprintf(last, "LOG_%04d.txt", counter - 1);
-    String last_path = String(String(path) + "/" + String(last));
+    // 使用snprintf避免String拼接
+    char last_path[128];
+    snprintf(last_path, sizeof(last_path), "%s/%s", path, last);
     if (!filesys->exists(last_path)) {
         sprintf(last, "LOG_%04d.txt", counter - 1);
-        last_path = String(String(path) + "/" + String(last));
+        // 更新last_path
+        snprintf(last_path, sizeof(last_path), "%s/%s", path, last);
     }
     File last_log = filesys->open(last_path);
 
@@ -90,7 +101,10 @@ void SD_LOG::getFilename(const char *path) {
         is_newfile = true;
         log_count = counter; // +1?
         // update index
-        updateIndex(String(path),counter + 1);
+        // 使用snprintf避免String拼接
+        char index_path[128];
+        snprintf(index_path, sizeof(index_path), "%s/index.txt", path);
+        updateIndex(index_path,counter + 1);
     }
     Serial.printf("[SDLOG] %d log files, using %s \n", counter, filename);
     sd_log = true;
@@ -120,10 +134,13 @@ void SD_LOG::getFilenameCSV(const char *path) {
     //     counter++;
     // }
     sprintf(last, "CSV_%04d.csv", counter - 1);
-    String last_path = String(String(path) + "/" + String(last));
+    // 使用snprintf避免String拼接
+    char last_path[128];
+    snprintf(last_path, sizeof(last_path), "%s/%s", path, last);
     if (!filesys->exists(last_path)) {
         sprintf(last, "CSV_%04d.csv", counter - 1);
-        last_path = String(String(path) + "/" + String(last));
+        // 更新last_path
+        snprintf(last_path, sizeof(last_path), "%s/%s", path, last);
     }
     File last_csv = filesys->open(last_path);
 
@@ -132,27 +149,41 @@ void SD_LOG::getFilenameCSV(const char *path) {
     } else {
         sprintf(filename_csv, "CSV_%04d.csv", counter);
         is_newfile_csv = true;
-        updateIndex(String(path),counter + 1);
+        // 使用snprintf避免String拼接
+        char index_path[128];
+        snprintf(index_path, sizeof(index_path), "%s/index.txt", path);
+        updateIndex(index_path,counter + 1);
     }
     Serial.printf("[SDLOG] %d csv files, using %s \n", counter, filename_csv);
     sd_csv = true;
 }
 
 int SD_LOG::begin(const char *path) {
+    if (sd_mutex == nullptr) {
+        sd_mutex = xSemaphoreCreateMutex();
+    }
+    
+    xSemaphoreTake(sd_mutex, portMAX_DELAY);
     log_directory = path;
     getFilename(path);
-    if (!sd_log)
+    if (!sd_log) {
+        xSemaphoreGive(sd_mutex);
         return -1;
-    log_path = String(String(path) + '/' + filename);
+    }
+    // 使用snprintf避免String拼接
+    char log_path[128];
+    snprintf(log_path, sizeof(log_path), "%s/%s", path, filename);
     log = filesys->open(log_path, "a", true);
     if (!log) {
         Serial.println("[SDLOG] Failed to open log file!");
         Serial.println("[SDLOG] Will not write log to SD card.");
         sd_log = false;
+        xSemaphoreGive(sd_mutex);
         return -1;
     }
     writeHeader();
     sd_log = true;
+    xSemaphoreGive(sd_mutex);
     return 0;
 }
 
@@ -161,7 +192,9 @@ int SD_LOG::beginCSV(const char *path) {
     getFilenameCSV(path);
     if (!sd_csv)
         return -1;
-    csv_path = String(String(path) + '/' + filename_csv);
+    // 使用snprintf避免String拼接
+    char csv_path[128];
+    snprintf(csv_path, sizeof(csv_path), "%s/%s", path, filename_csv);
     csv = filesys->open(csv_path, "a", true);
     if (!csv) {
         Serial.println("[SDLOG] Failed to open csv file!");
@@ -195,8 +228,7 @@ void SD_LOG::writeHeader() {
 }
 
 void SD_LOG::writeHeaderCSV() { // TODO: needs more confirmation about title.
-    csv.close();
-    csv = filesys->open(csv_path, "a");
+    xSemaphoreTake(sd_mutex, portMAX_DELAY);
     // Serial.printf("csvfile %s, csv size %d, is_newfile_csv = %d\n",csv.path(),csv.size(),is_newfile_csv);
     if (is_newfile_csv && csv.size() < 200) {
         csv.printf("# ESP32 DEV MODULE CSV FILE %s \n", filename_csv);
@@ -209,9 +241,8 @@ void SD_LOG::writeHeaderCSV() { // TODO: needs more confirmation about title.
         }
         Serial.printf("[SDLOG][D] Writing CSV Headers, is_newfile = %d, filesize = %d\n", is_newfile_csv, csv.size());
     }
-    // csv.flush();
-    csv.close();
-    csv = filesys->open(csv_path, "a");
+    csv.flush();
+    xSemaphoreGive(sd_mutex);
     // Serial.printf("Write hdr end\n");
 }
 
@@ -219,10 +250,14 @@ void SD_LOG::appendCSV(const char *format, ...) { // TODO: maybe implement item 
     if (!sd_csv) {
         return;
     }
+    
+    xSemaphoreTake(sd_mutex, portMAX_DELAY);
+    
     if (!filesys->exists(csv_path)) {
         Serial.println("[SDLOG] CSV file unavailable!");
         sd_csv = false;
         SD.end();
+        xSemaphoreGive(sd_mutex);
         return;
     }
     if (csv.size() >= MAX_CSV_SIZE && !size_checked) {
@@ -249,6 +284,7 @@ void SD_LOG::appendCSV(const char *format, ...) { // TODO: maybe implement item 
         is_startline_csv = true;
     csv.print(buffer);
     csv.flush();
+    xSemaphoreGive(sd_mutex);
 }
 
 void SD_LOG::append(const char *format, ...) {
@@ -310,7 +346,7 @@ void SD_LOG::appendBuffer(const char *format, ...) {
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     if (is_startline) {
-        char *time_buffer = new char[128];
+        char time_buffer[128];  // 使用栈数组替代动态分配
         if (getLocalTime(&timein, 1)) {
             sprintf(time_buffer, "%d-%02d-%02d %02d:%02d:%02d > ", timein.tm_year + 1900, timein.tm_mon + 1,
                     timein.tm_mday, timein.tm_hour, timein.tm_min, timein.tm_sec);
@@ -319,7 +355,6 @@ void SD_LOG::appendBuffer(const char *format, ...) {
             sprintf(time_buffer, "[%6llu.%03llu] > ", millis64() / 1000, millis64() % 1000);
             large_buffer += time_buffer;
         }
-        delete[] time_buffer;
         is_startline = false;
     }
     if (nullptr != strchr(format, '\n')) /* detect end of line in stream */
@@ -370,7 +405,7 @@ void SD_LOG::appendBufferCSV(const char *format, ...) {
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     if (is_startline_csv) {
-        char *headers = new char[128];
+        char headers[128];  // 使用栈数组替代动态分配
 #ifdef HAS_RTC
         sprintf(headers, "%.2f,", rtc.getTemperature());
         large_buffer_csv += headers;
@@ -388,7 +423,6 @@ void SD_LOG::appendBufferCSV(const char *format, ...) {
             sprintf(headers, "null,null,");
             large_buffer_csv += headers;
         }
-        delete[] headers;
         is_startline_csv = false;
     }
     if (nullptr != strchr(format, '\n')) /* detect end of line in stream */

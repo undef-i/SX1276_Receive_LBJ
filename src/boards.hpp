@@ -18,12 +18,13 @@
 #ifdef HAS_DISPLAY
 
 #include <U8g2lib.h>
+#include <memory>
 
 #ifndef DISPLAY_MODEL
 #define DISPLAY_MODEL U8G2_SSD1306_128X64_NONAME_F_HW_I2C
 #endif
 
-extern DISPLAY_MODEL *u8g2;
+extern std::unique_ptr<DISPLAY_MODEL> u8g2;
 #endif
 
 #ifdef HAS_RTC
@@ -42,6 +43,7 @@ extern RTC_DS3231 rtc;
 #include "XPowersLib.h"
 
 
+#include <memory>
 XPowersLibInterface *PMU = NULL;
 
 #ifndef PMU_WIRE_PORT
@@ -61,24 +63,24 @@ void setPmuFlag()
 bool initPMU()
 {
     if (!PMU) {
-        PMU = new XPowersAXP2101(PMU_WIRE_PORT);
-        if (!PMU->init()) {
+        auto pmu_ptr = std::unique_ptr<XPowersAXP2101>(new XPowersAXP2101(PMU_WIRE_PORT));
+        if (!pmu_ptr->init()) {
             Serial.println("Warning: Failed to find AXP2101 power management");
-            delete PMU;
-            PMU = NULL;
         } else {
             Serial.println("AXP2101 PMU init succeeded, using AXP2101 PMU");
+            PMU = pmu_ptr.release();  // 转移所有权
+            return true;
         }
     }
 
     if (!PMU) {
-        PMU = new XPowersAXP192(PMU_WIRE_PORT);
-        if (!PMU->init()) {
+        auto pmu_ptr = std::unique_ptr<XPowersAXP192>(new XPowersAXP192(PMU_WIRE_PORT));
+        if (!pmu_ptr->init()) {
             Serial.println("Warning: Failed to find AXP192 power management");
-            delete PMU;
-            PMU = NULL;
         } else {
             Serial.println("AXP192 PMU init succeeded, using AXP192 PMU");
+            PMU = pmu_ptr.release();  // 转移所有权
+            return true;
         }
     }
 

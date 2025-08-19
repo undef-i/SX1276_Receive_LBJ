@@ -3,6 +3,7 @@
 //
 
 #include <cstdint>
+#include <cinttypes>
 #include "aPreferences.h"
 
 aPreferences::aPreferences() : pref{}, have_pref(false), overflow(false), lines(0), ret_lines(0), ids(0), ns_name{} {
@@ -69,30 +70,34 @@ bool aPreferences::append(lbj_data lbj, rx_info rx, float volt, float temp) {
      * route_utf8,pos_lon_deg,pos_lon_min,pos_lat_deg,pos_lat_min,pos_lon,pos_lat,rssi,fer,ppm,id
      */
     String line;
-    char buffer[256];
+    char buffer[512];
     struct tm now{};
-    getLocalTime(&now, 1);
+    if (!getLocalTime(&now, 1)) {
+        Serial.println("[NVS] 获取本地时间失败");
+        return false;
+    }
 
-    if (lines > PREF_MAX_LINES) {
-        // todo: add countermeasures (cycling).
+    if (lines >= PREF_MAX_LINES) {
         lines = 0;
         overflow = true;
+        Serial.println("[NVS] 存储已满，开始循环覆盖旧数据");
     }
-    sprintf(buffer, "%04d,%1.2f,%lld,", lines, volt, esp_timer_get_time());
+    
+    snprintf(buffer, sizeof(buffer), "%04d,%1.2f,%" PRId64 ",", lines, volt, esp_timer_get_time());
     line += buffer;
-    sprintf(buffer, "%.2f,%d-%02d-%02d,%02d:%02d:%02d,", temp, now.tm_year + 1900, now.tm_mon + 1,
+    snprintf(buffer, sizeof(buffer), "%.2f,%d-%02d-%02d,%02d:%02d:%02d,", temp, now.tm_year + 1900, now.tm_mon + 1,
             now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);
     line += buffer;
     //type,train,direction,speed,position,time,info2_hex,loco_type,
-    sprintf(buffer, "%d,%s,%d,%s,%s,%s,%s,%s,", lbj.type, lbj.train, lbj.direction, lbj.speed, lbj.position, lbj.time,
+    snprintf(buffer, sizeof(buffer), "%d,%s,%d,%s,%s,%s,%s,%s,", lbj.type, lbj.train, lbj.direction, lbj.speed, lbj.position, lbj.time,
             lbj.info2_hex.c_str(), lbj.loco_type.c_str());
     line += buffer;
     // lbj_class,loco,route,route_utf8,pos_lon_deg,pos_lon_min,pos_lat_deg,pos_lat_min,pos_lon,pos_lat
-    sprintf(buffer, "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,", lbj.lbj_class, lbj.loco, lbj.route, lbj.route_utf8,
+    snprintf(buffer, sizeof(buffer), "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,", lbj.lbj_class, lbj.loco, lbj.route, lbj.route_utf8,
             lbj.pos_lon_deg, lbj.pos_lon_min, lbj.pos_lat_deg, lbj.pos_lat_min, lbj.pos_lon, lbj.pos_lat);
     line += buffer;
     // rssi,fer,ppm,ids
-    sprintf(buffer, "%.2f,%.2f,%.2f,%u,", rx.rssi, rx.fer, rx.ppm, ids);
+    snprintf(buffer, sizeof(buffer), "%.2f,%.2f,%.2f,%u,", rx.rssi, rx.fer, rx.ppm, ids);
     line += buffer;
     // epi
     line += lbj.epi;
@@ -103,13 +108,20 @@ bool aPreferences::append(lbj_data lbj, rx_info rx, float volt, float temp) {
     //     line += buffer;
     // }
 
-    sprintf(buffer, "I%04d", lines);
-    pref.putString(buffer, line);
-    lines++;
-    pref.putUShort("lines", lines);
-    ids++;
-    pref.putUInt("ids", ids);
-    return true;
+    snprintf(buffer, sizeof(buffer), "I%04d", lines);
+    bool success = pref.putString(buffer, line);
+    if (success) {
+        lines++;
+        pref.putUShort("lines", lines);
+        ids++;
+        pref.putUInt("ids", ids);
+        write_count++;
+        return true;
+    } else {
+        Serial.println("[NVS] 数据写入失败");
+        error_count++;
+        return false;
+    }
 }
 
 bool
@@ -120,7 +132,12 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
         return false;
     }
 
+    int32_t old_ret_lines = ret_lines;
     ret_lines += bias;
+    
+    Serial.printf("[NVS] Debug: bias=%d, old_ret_lines=%d, new_ret_lines=%d, lines=%d, overflow=%d\n", 
+                  bias, old_ret_lines, ret_lines, lines, overflow);
+    
     if (overflow) {
         if (ret_lines < 0)
             ret_lines = PREF_MAX_LINES;
@@ -132,12 +149,14 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
         if (ret_lines >= lines)
             ret_lines = 0;
     }
+    
+    Serial.printf("[NVS] Debug: adjusted ret_lines=%d\n", ret_lines);
 
     char buf[8];
     sprintf(buf, "I%04d", ret_lines);
     
     if (!pref.isKey(buf)) {
-        Serial.printf("[NVS] Key %s not found\n", buf);
+        Serial.printf("[NVS] Key %s not found (lines=%d, ret_lines=%d, bias=%d)\n", buf, lines, ret_lines, bias);
         return false;
     }
 
@@ -151,57 +170,59 @@ aPreferences::retrieve(lbj_data *lbj, rx_info *rx, String *time_str, uint16_t *l
 
     // Tokenize
     String tokens[29];
-    for (size_t i = 0, c = 0; i < line.length(); i++) {
+    size_t token_count = 0;
+    for (size_t i = 0; i < line.length() && token_count < 29; i++) {
         if (line[i] == ',') {
-            c++;
-            if (c >= 29) break; // 防止超出数组边界
+            token_count++;
             continue;
         }
-        if (c < 29)
-            tokens[c] += line[i];
+        if (token_count < 29)
+            tokens[token_count] += line[i];
     }
+PIO刷写    
+    token_count = std::min(token_count + 1, (size_t)29);
 
     try {
         // 基本数据转换
-        if (line_num && !tokens[0].isEmpty()) *line_num = std::stoi(tokens[0].c_str());
-        if (temp && !tokens[3].isEmpty()) *temp = std::stof(tokens[3].c_str());
+        if (line_num && token_count > 0 && !tokens[0].isEmpty()) *line_num = std::stoi(tokens[0].c_str());
+        if (temp && token_count > 3 && !tokens[3].isEmpty()) *temp = std::stof(tokens[3].c_str());
         
         // 时间信息
-        if (time_str && !tokens[4].isEmpty() && !tokens[5].isEmpty()) {
+        if (time_str && token_count > 5 && !tokens[4].isEmpty() && !tokens[5].isEmpty()) {
             *time_str = tokens[4] + " " + tokens[5];
         }
 
         // LBJ数据转换
         if (lbj) {
-            if (!tokens[6].isEmpty()) lbj->type = (int8_t) std::stoi(tokens[6].c_str());
-            if (!tokens[7].isEmpty()) strncpy(lbj->train, tokens[7].c_str(), sizeof(lbj->train) - 1); lbj->train[sizeof(lbj->train) - 1] = '\0';
-            if (!tokens[8].isEmpty()) lbj->direction = (int8_t) std::stoi(tokens[8].c_str());
-            if (!tokens[9].isEmpty()) strncpy(lbj->speed, tokens[9].c_str(), sizeof(lbj->speed) - 1); lbj->speed[sizeof(lbj->speed) - 1] = '\0';
-            if (!tokens[10].isEmpty()) strncpy(lbj->position, tokens[10].c_str(), sizeof(lbj->position) - 1); lbj->position[sizeof(lbj->position) - 1] = '\0';
-            if (!tokens[11].isEmpty()) strncpy(lbj->time, tokens[11].c_str(), sizeof(lbj->time) - 1); lbj->time[sizeof(lbj->time) - 1] = '\0';
-            if (!tokens[12].isEmpty()) lbj->info2_hex = tokens[12];
-            if (!tokens[13].isEmpty()) lbj->loco_type = tokens[13];
+            if (token_count > 6 && !tokens[6].isEmpty()) lbj->type = (int8_t) std::stoi(tokens[6].c_str());
+            if (token_count > 7 && !tokens[7].isEmpty()) strncpy(lbj->train, tokens[7].c_str(), sizeof(lbj->train) - 1); lbj->train[sizeof(lbj->train) - 1] = '\0';
+            if (token_count > 8 && !tokens[8].isEmpty()) lbj->direction = (int8_t) std::stoi(tokens[8].c_str());
+            if (token_count > 9 && !tokens[9].isEmpty()) strncpy(lbj->speed, tokens[9].c_str(), sizeof(lbj->speed) - 1); lbj->speed[sizeof(lbj->speed) - 1] = '\0';
+            if (token_count > 10 && !tokens[10].isEmpty()) strncpy(lbj->position, tokens[10].c_str(), sizeof(lbj->position) - 1); lbj->position[sizeof(lbj->position) - 1] = '\0';
+            if (token_count > 11 && !tokens[11].isEmpty()) strncpy(lbj->time, tokens[11].c_str(), sizeof(lbj->time) - 1); lbj->time[sizeof(lbj->time) - 1] = '\0';
+            if (token_count > 12 && !tokens[12].isEmpty()) lbj->info2_hex = tokens[12];
+            if (token_count > 13 && !tokens[13].isEmpty()) lbj->loco_type = tokens[13];
 
-            if (!tokens[14].isEmpty()) strncpy(lbj->lbj_class, tokens[14].c_str(), sizeof(lbj->lbj_class) - 1); lbj->lbj_class[sizeof(lbj->lbj_class) - 1] = '\0';
-            if (!tokens[15].isEmpty()) strncpy(lbj->loco, tokens[15].c_str(), sizeof(lbj->loco) - 1); lbj->loco[sizeof(lbj->loco) - 1] = '\0';
-            if (!tokens[16].isEmpty()) strncpy(lbj->route, tokens[16].c_str(), sizeof(lbj->route) - 1); lbj->route[sizeof(lbj->route) - 1] = '\0';
-            if (!tokens[17].isEmpty()) strncpy(lbj->route_utf8, tokens[17].c_str(), sizeof(lbj->route_utf8) - 1); lbj->route_utf8[sizeof(lbj->route_utf8) - 1] = '\0';
-            if (!tokens[18].isEmpty()) strncpy(lbj->pos_lon_deg, tokens[18].c_str(), sizeof(lbj->pos_lon_deg) - 1); lbj->pos_lon_deg[sizeof(lbj->pos_lon_deg) - 1] = '\0';
-            if (!tokens[19].isEmpty()) strncpy(lbj->pos_lon_min, tokens[19].c_str(), sizeof(lbj->pos_lon_min) - 1); lbj->pos_lon_min[sizeof(lbj->pos_lon_min) - 1] = '\0';
-            if (!tokens[20].isEmpty()) strncpy(lbj->pos_lat_deg, tokens[20].c_str(), sizeof(lbj->pos_lat_deg) - 1); lbj->pos_lat_deg[sizeof(lbj->pos_lat_deg) - 1] = '\0';
-            if (!tokens[21].isEmpty()) strncpy(lbj->pos_lat_min, tokens[21].c_str(), sizeof(lbj->pos_lat_min) - 1); lbj->pos_lat_min[sizeof(lbj->pos_lat_min) - 1] = '\0';
-            if (!tokens[22].isEmpty()) strncpy(lbj->pos_lon, tokens[22].c_str(), sizeof(lbj->pos_lon) - 1); lbj->pos_lon[sizeof(lbj->pos_lon) - 1] = '\0';
-            if (!tokens[23].isEmpty()) strncpy(lbj->pos_lat, tokens[23].c_str(), sizeof(lbj->pos_lat) - 1); lbj->pos_lat[sizeof(lbj->pos_lat) - 1] = '\0';
-            if (!tokens[28].isEmpty()) lbj->epi = tokens[28];
+            if (token_count > 14 && !tokens[14].isEmpty()) strncpy(lbj->lbj_class, tokens[14].c_str(), sizeof(lbj->lbj_class) - 1); lbj->lbj_class[sizeof(lbj->lbj_class) - 1] = '\0';
+            if (token_count > 15 && !tokens[15].isEmpty()) strncpy(lbj->loco, tokens[15].c_str(), sizeof(lbj->loco) - 1); lbj->loco[sizeof(lbj->loco) - 1] = '\0';
+            if (token_count > 16 && !tokens[16].isEmpty()) strncpy(lbj->route, tokens[16].c_str(), sizeof(lbj->route) - 1); lbj->route[sizeof(lbj->route) - 1] = '\0';
+            if (token_count > 17 && !tokens[17].isEmpty()) strncpy(lbj->route_utf8, tokens[17].c_str(), sizeof(lbj->route_utf8) - 1); lbj->route_utf8[sizeof(lbj->route_utf8) - 1] = '\0';
+            if (token_count > 18 && !tokens[18].isEmpty()) strncpy(lbj->pos_lon_deg, tokens[18].c_str(), sizeof(lbj->pos_lon_deg) - 1); lbj->pos_lon_deg[sizeof(lbj->pos_lon_deg) - 1] = '\0';
+            if (token_count > 19 && !tokens[19].isEmpty()) strncpy(lbj->pos_lon_min, tokens[19].c_str(), sizeof(lbj->pos_lon_min) - 1); lbj->pos_lon_min[sizeof(lbj->pos_lon_min) - 1] = '\0';
+            if (token_count > 20 && !tokens[20].isEmpty()) strncpy(lbj->pos_lat_deg, tokens[20].c_str(), sizeof(lbj->pos_lat_deg) - 1); lbj->pos_lat_deg[sizeof(lbj->pos_lat_deg) - 1] = '\0';
+            if (token_count > 21 && !tokens[21].isEmpty()) strncpy(lbj->pos_lat_min, tokens[21].c_str(), sizeof(lbj->pos_lat_min) - 1); lbj->pos_lat_min[sizeof(lbj->pos_lat_min) - 1] = '\0';
+            if (token_count > 22 && !tokens[22].isEmpty()) strncpy(lbj->pos_lon, tokens[22].c_str(), sizeof(lbj->pos_lon) - 1); lbj->pos_lon[sizeof(lbj->pos_lon) - 1] = '\0';
+            if (token_count > 23 && !tokens[23].isEmpty()) strncpy(lbj->pos_lat, tokens[23].c_str(), sizeof(lbj->pos_lat) - 1); lbj->pos_lat[sizeof(lbj->pos_lat) - 1] = '\0';
+            if (token_count > 28 && !tokens[28].isEmpty()) lbj->epi = tokens[28];
         }
 
         if (rx) {
-            if (!tokens[24].isEmpty()) rx->rssi = std::stof(tokens[24].c_str());
-            if (!tokens[25].isEmpty()) rx->fer = std::stof(tokens[25].c_str());
-            if (!tokens[26].isEmpty()) rx->ppm = std::stof(tokens[26].c_str());
+            if (token_count > 24 && !tokens[24].isEmpty()) rx->rssi = std::stof(tokens[24].c_str());
+            if (token_count > 25 && !tokens[25].isEmpty()) rx->fer = std::stof(tokens[25].c_str());
+            if (token_count > 26 && !tokens[26].isEmpty()) rx->ppm = std::stof(tokens[26].c_str());
         }
         
-        if (id && !tokens[27].isEmpty()) *id = std::stoul(tokens[27].c_str());
+        if (id && token_count > 27 && !tokens[27].isEmpty()) *id = std::stoul(tokens[27].c_str());
 
     } catch (const std::exception& e) {
         Serial.printf("[NVS] Data conversion error: %s\n", e.what());
@@ -265,6 +286,10 @@ uint32_t aPreferences::getID() {
     return ids;
 }
 
+uint32_t aPreferences::getID() {
+    return ids;
+}
+
 bool aPreferences::isLatest(int8_t bias) const {
     if (ret_lines == lines + bias)
         return true;
@@ -298,14 +323,14 @@ bool aPreferences::retrieve(String *str_array, uint32_t arr_size, int8_t bias) {
     Serial.printf("arr size = %d\n",arr_size);
     // Tokenize
     // String tokens[28];
-    for (size_t i = 0, c = 0; i < line.length(); i++) {
-        if (c >= arr_size)
-            break;
+    size_t token_count = 0;
+    for (size_t i = 0; i < line.length() && token_count < arr_size; i++) {
         if (line[i] == ',') {
-            c++;
+            token_count++;
             continue;
         }
-        str_array[c] += line[i];
+        if (token_count < arr_size)
+            str_array[token_count] += line[i];
     }
     return true;
 }

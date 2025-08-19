@@ -30,7 +30,10 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
         if (len > 8192) { 
             return (RADIOLIB_ERR_MEMORY_ALLOCATION_FAILED);
         }
-        uint8_t data[len + 1];
+        uint8_t* data = new (std::nothrow) uint8_t[len + 1];
+        if (!data) {
+            return (RADIOLIB_ERR_MEMORY_ALLOCATION_FAILED);
+        }
 #endif
 
         state = readDataMA(data, &length, &p[i].addr, &p[i].func, &framePos, &addr_next, &p[i].is_empty,
@@ -38,20 +41,23 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
 
         if (i && state == RADIOLIB_ERR_ADDRESS_NOT_FOUND) {
 //                Serial.println("ADDR NO MATCH");
-//             delete[] data;
-//             data = nullptr;
+#if !defined(RADIOLIB_STATIC_ONLY)
+            delete[] data;
+            data = nullptr;
+#endif
             state = RADIOLIB_ERR_NONE;
-            break;
+            continue;  // 确保内存释放后继续循环
         }
 
         if (i && state == RADIOLIB_ERR_MSG_CORRUPT) {
             // Serial.printf("[D] MSG%d CORRUPT.\n", i);
             // Serial.printf("[D] data[] len %d, message len %d, data addr %p\n", len + 1, length, data);
-            // delete[] data; // Due to unknown reason crash often occurs here.
-            // Fixed by stop using new and delete...no choice, sorry.
-            // data = nullptr; // REMEMBER TO INITIALIZE POINTER AFTER DELETE!!!
+#if !defined(RADIOLIB_STATIC_ONLY)
+            delete[] data;
+            data = nullptr;
+#endif
             state = RADIOLIB_ERR_NONE;
-            break;
+            continue;  // 确保内存释放后继续循环
         }
 
         if (state == RADIOLIB_ERR_NONE && !p[i].is_empty) {
@@ -71,8 +77,8 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
 
         }
 #if !defined(RADIOLIB_STATIC_ONLY)
-        // delete[] data;
-        // data = nullptr;
+        delete[] data;
+        data = nullptr;
 #endif
         if (state != RADIOLIB_ERR_NONE)
             break;

@@ -486,20 +486,43 @@ extern SemaphoreHandle_t data_mutex;
             break;
         case MENU_TX_TEST:
             switch (selected_item) {
+                // case 0:
+                //     showMessage("发射测试", "正在发送POCSAG测试数据...");
+                //     extern void sendTestData();
+                //     sendTestData();
+                //     showMessage("发射测试", "POCSAG测试数据发送完成！");
+                //     delay(1000);
+                //     showTxTest();
+                //     highlightItem(selected_item);
+                //     break;
                 case 0:
-                    // 发送测试数据
-                    showMessage("发射测试", "正在发送测试数据...");
-                    // 调用外部函数发送测试数据
-                    extern void sendTestData();
-                    sendTestData();
-                    showMessage("发射测试", "测试数据发送完成！");
+                    showMessage("发射测试", "正在发送蓝牙测试数据...");
+                    extern struct lbj_data current_lbj_data;
+                    extern struct rx_info rxInfo;
+                    extern SemaphoreHandle_t data_mutex;
+                    extern void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest);
+                    
+                    struct lbj_data test_data;
+                    strcpy(test_data.train, "9999");
+                    strcpy(test_data.loco, "99999999");
+                    strcpy(test_data.speed, "120");
+                    strcpy(test_data.position, "114");
+                    test_data.direction = 1;
+                    test_data.type = 1;
+                    strcpy(test_data.time, "11:45");
+                    test_data.loco_type = "";
+                    
+                    struct rx_info test_rx;
+                    test_rx.rssi = -75.0;
+                    test_rx.fer = 0.5;
+                    test_rx.ppm = 2.5;
+                    test_rx.timer = 0;
+                    
+                    sendTrainDataOverBLE(test_data, test_rx, true);
+                    showMessage("发射测试", "蓝牙测试数据发送完成！");
                     delay(1000);
                     showTxTest();
                     highlightItem(selected_item);
-                    break;
-                case 1:
-                    // 返回主菜单
-                    showLast();
                     break;
             }
             break;
@@ -1035,9 +1058,10 @@ void Menu::showTxTest() {
     display->drawUTF8(0, 12, "发射测试");
     display->drawHLine(0, 14, 128);
 
-    items[0] = "发送测试数据";
-    display->drawUTF8(0, 26, items[0].c_str());
-    items[1] = "返回菜单";
-    display->drawUTF8(0, 38, items[1].c_str());
+    // items[0] = "发送POCSAG测试";
+    // display->drawUTF8(0, 26, items[0].c_str());
+    items[0] = ""; // POCSAG测试菜单项已注释
+    items[1] = "发送蓝牙测试数据";
+    display->drawUTF8(0, 26, items[1].c_str());
 }
 

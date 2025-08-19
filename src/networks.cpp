@@ -570,12 +570,17 @@ int16_t readDataLBJ(struct PagerClient::pocsag_data *p, struct lbj_data *l) {
                 lbj_sync:
                 l->type = 2;
                 if (p[i].str.length() >= 5 && p[i].str.length() > 0 && p[i].str[0] != 'X') {
-                    for (size_t c = 1, v = 0; c < 5 && v < sizeof(l->time) - 2; c++, v++) {
-                        l->time[v] = p[i].str[c];
-                        if (c == 2 && v + 1 < sizeof(l->time) - 1)
-                            l->time[++v] = ':';
+                    size_t v = 0;
+                    for (size_t c = 1; c < 5 && v < sizeof(l->time) - 2; c++) {
+                        char ch = p[i].str[c];
+                        if (isdigit(ch)) {
+                            l->time[v++] = ch;
+                            if (v == 2 && v < sizeof(l->time) - 1) {
+                                l->time[v++] = ':';
+                            }
+                        }
                     }
-                    l->time[sizeof(l->time) - 1] = 0;
+                    l->time[v] = 0;
                 }
                 if (p[i].epi.length() >= 4 && p[i].epi.length() > 3 && p[i].epi[3] == 'm') {
                     l->epi = p[i].epi.substring(2, 3);

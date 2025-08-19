@@ -3,9 +3,10 @@
 //
 
 #include "boards.hpp"
+#include <memory>
 
 #ifdef HAS_DISPLAY
-DISPLAY_MODEL *u8g2 = nullptr;
+std::unique_ptr<DISPLAY_MODEL> u8g2 = nullptr;
 #endif
 
 ESP32AnalogRead battery;
@@ -78,7 +79,7 @@ void initBoard() {
     Wire.beginTransmission(0x3C);
     if (Wire.endTransmission() == 0) {
         Serial.println("Started OLED");
-        u8g2 = new DISPLAY_MODEL(U8G2_R0, U8X8_PIN_NONE);
+        u8g2 = std::unique_ptr<DISPLAY_MODEL>(new DISPLAY_MODEL(U8G2_R0, U8X8_PIN_NONE));
         u8g2->begin();
         u8g2->clearBuffer();
         u8g2->setFlipMode(0);
