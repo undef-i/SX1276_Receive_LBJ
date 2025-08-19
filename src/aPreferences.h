@@ -33,6 +33,8 @@ public:
 
     void getStats();
 
+    uint32_t getID();
+
     int32_t getRetLines();
 
     void setRetLines(int32_t line);
