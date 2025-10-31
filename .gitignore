@@ -9,3 +9,4 @@ logs
 /readcd_txt.bat
 rust
 .clang-format
+uncrustify.cfg

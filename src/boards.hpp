@@ -14,7 +14,6 @@
 
 #endif
 
-extern bool no_sd;
 
 #ifdef HAS_DISPLAY
 

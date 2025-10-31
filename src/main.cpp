@@ -312,9 +312,7 @@ void updateInfo() {
     
     if (voltage < 3.15 && !low_volt_warned) {
         Serial.printf("Warning! Low Voltage detected, %1.2fV (%d%%)\n", voltage, batt_percent);
-        if (!no_sd && have_sd) {
-            sd1.append("低压警告，电池电压%1.2fV (%d%%)\n", voltage, batt_percent);
-        }
+        sd1.append("低压警告，电池电压%1.2fV (%d%%)\n", voltage, batt_percent);
         low_volt_warned = true;
     }
     u8g2->sendBuffer();
@@ -820,11 +818,9 @@ void setup() {
     runtime_timer = millis64();
     esp_reset_reason_t reset_reason = esp_reset_reason();
     initBoard();
-    if (!no_sd) {
-        sd1.setFS(SD);
-        delay(150);
-    }
-    
+    sd1.setFS(SD);
+    delay(150);
+
     data_mutex = xSemaphoreCreateMutex();
     if (data_mutex == nullptr) {
         Serial.println("[ERROR] Failed to create data mutex!");
@@ -846,7 +842,7 @@ void setup() {
 #endif
 
     Serial.printf("RST: %s\n", printResetReason(reset_reason).c_str());
-    if (have_sd && !no_sd) {
+    if (have_sd) {
         sd1.begin("/LOGTEST");
         sd1.beginCSV("/CSVTEST");
         sd1.append("电池电压 %1.2fV\n", battery.readVoltage() * 2);
@@ -970,9 +966,8 @@ void setup() {
 
     digitalWrite(BOARD_LED, LED_OFF);
     Serial.printf("Booting time %llu ms\n", millis64() - runtime_timer);
-    if (!no_sd && have_sd) {
-        sd1.append("启动用时 %llu ms\n", millis64() - runtime_timer);
-    }
+    sd1.append("启动用时 %llu ms\n", millis64() - runtime_timer);
+
     runtime_timer = 0;
 
     if (u8g2) {
@@ -1657,23 +1652,19 @@ void initFmtVars() {
 void formatDataTask(void *pVoid) {
     fd_state = TASK_RUNNING;
     // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    if (!no_sd && have_sd) {
-        sd1.append(2, "格式化任务已创建\n");
-    }
+    sd1.append(2, "格式化任务已创建\n");
+    
     for (auto &i: db->pocsagData) {
         if (i.is_empty)
             continue;
         Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        if (!no_sd && have_sd) {
-            sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        }
+        sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+        
         db->str = db->str + "  " + i.str;
     }
 
     // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    if (!no_sd && have_sd) {
-        sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
-    }
+    sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
     Serial.printf("decode complete.[%llu]", millis64() - runtime_timer);
     readDataLBJ(db->pocsagData, &db->lbjData);
     sd1.append(2, "LBJ读取完成，用时[%llu]\n", millis64() - runtime_timer);
@@ -1683,10 +1674,15 @@ void formatDataTask(void *pVoid) {
     printDataSerial(db->pocsagData, db->lbjData, rxInfo);
     sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
     
-    // 保护共享数据
-    if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        current_lbj_data = db->lbjData;
-        xSemaphoreGive(data_mutex);
+    if (data_mutex != nullptr) {
+        if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            current_lbj_data = db->lbjData;
+            xSemaphoreGive(data_mutex);
+        } else {
+            Serial.println("[ERROR] data_mutex take timeout in formatDataTask - CRITICAL!");
+        }
+    } else {
+        Serial.println("[ERROR] data_mutex is null in formatDataTask - CRITICAL!");
     }
     
     if (ble_enabled && db != nullptr) {
@@ -1699,12 +1695,11 @@ void formatDataTask(void *pVoid) {
     Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
 
     // sd1.disableSizeCheck();
-    if (!no_sd && have_sd) {
-        appendDataLog(db->pocsagData, db->lbjData, rxInfo);
-        Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
-        appendDataCSV(db->pocsagData, db->lbjData, rxInfo);
-        Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
-    }
+    appendDataLog(db->pocsagData, db->lbjData, rxInfo);
+    Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
+    appendDataCSV(db->pocsagData, db->lbjData, rxInfo);
+    Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
+    
     // sd1.enableSizeCheck();
 
     printDataTelnet(db->pocsagData, db->lbjData, rxInfo);
@@ -1753,9 +1748,8 @@ void simpleFormatTask() { // only output initially phrased data in case of memor
         if (i.is_empty)
             continue;
         Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        if (!no_sd && have_sd) {
-            sd1.append("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        }
+        sd1.append("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+        
         // db->str = db->str + "  " + i.str;
         db->str += String(i.addr) + "/" + String(i.func) + ":" + i.str + "\n ";
     }
