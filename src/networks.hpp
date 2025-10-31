@@ -8,6 +8,8 @@
 #include <WiFi.h>
 #include <ctime>
 #include "esp_sntp.h"
+#include <Preferences.h>
+// #include <PubSubClient.h>
 #include "ESPTelnet.h"
 #include <RadioLib.h>
 #include "unicon.hpp"
@@ -72,9 +74,11 @@ extern const char *ntpServer2;
 extern struct tm time_info;
 
 // you'll have to change this!
-#define WIFI_SSID       "MI CC9 Pro"
-#define WIFI_PASSWORD   "11223344"
-#define NETWORK_TIMEOUT 1800000 // 30 minutes
+// #define WIFI_SSID       "MI CC9 Pro"
+// #define WIFI_PASSWORD   "11223344"
+// #define NETWORK_TIMEOUT 1800000 // 30 minutes
+extern String wifiSSID;
+extern String wifiPassword;
 
 extern ESPTelnet telnet;
 extern IPAddress ip;
@@ -94,7 +98,13 @@ extern bool telnet_online;
 
 bool isConnected();
 
-bool connectWiFi(const char *ssid, const char *password, int max_tries = 20, int pause = 500);
+bool connectWiFi();
+
+void performSmartConfig();
+
+bool connectToWiFi(const String &ssid, const String &password, int timeout);
+
+// bool connectMQTT();
 
 void silentConnect(const char *ssid, const char *password);
 

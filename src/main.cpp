@@ -40,6 +40,11 @@
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
 
+// configure the wifi connection
+String wifiSSID = "MI CC9 Pro";
+String wifiPassword = "11223344";
+#define NETWORK_TIMEOUT 1800000 // 30 minutes
+
 #define WDT_TIMEOUT 20 // sec
 // #define WDT_RST_PERIOD 4000 // ms
 #define FD_TASK_STACK_SIZE 8000
@@ -864,26 +869,83 @@ void setup() {
         u8g2->sendBuffer();
     }
 
+#ifdef USE_SMARTCONFIG
     // initialize wireless network.
-    if (!no_wifi) {
-        Serial.printf("Connecting to %s ", WIFI_SSID);
-        connectWiFi(WIFI_SSID, WIFI_PASSWORD, 1); // usually max_tries = 25.
-        if (isConnected()) {
-            ip = WiFi.localIP();
-            Serial.println();
-            Serial.print("[Telnet] ");
-            Serial.print(ip);
-            Serial.print(":");
-            Serial.println(port);
-            setupTelnet(); // todo: find another library / modify the code to support multiple client connection.
-        } else {
-            Serial.println();
-            Serial.println("Error connecting to WiFi, Telnet startup skipped.");
+    Serial.printf("Connecting to WiFi\n");
+
+    Preferences preferences;
+    preferences.begin("wifi-config", false);
+
+    String savedSSID = preferences.getString("ssid", "");
+    String savedPassword = preferences.getString("password", "");
+
+    if (!savedSSID.isEmpty() && !savedPassword.isEmpty()) {
+        if (u8g2) {
+            u8g2->setDrawColor(0);
+            u8g2->drawBox(0, 42, 128, 14);
+            u8g2->setDrawColor(1);
+            u8g2->setCursor(0, 52);
+            u8g2->println("Waiting for WiFi...");
+            u8g2->sendBuffer();
+        }
+        if (!connectToWiFi(savedSSID, savedPassword, 10000)) {
+            if (u8g2) {
+                u8g2->setDrawColor(0);
+                u8g2->drawBox(0, 42, 128, 14);
+                u8g2->setDrawColor(1);
+                u8g2->setCursor(0, 40);
+                u8g2->println("Failed to connect to Wifi");
+                u8g2->setCursor(0, 52);
+                u8g2->println("Waiting for SmartConfig...");
+                u8g2->sendBuffer();
+            }
+            performSmartConfig();
         }
     } else {
-        Serial.println("WiFi is disabled.");
-        WiFiClass::mode(WIFI_OFF);
-        WiFi.setSleep(true);
+        if (u8g2) {
+            u8g2->setDrawColor(0);
+            u8g2->drawBox(0, 42, 128, 14);
+            u8g2->setDrawColor(1);
+            u8g2->setCursor(0, 52);
+            u8g2->println("Waiting for SmartConfig...");
+            u8g2->sendBuffer();
+        }
+        performSmartConfig();
+    }
+
+    Serial.print("[Network]IP Address: ");
+    Serial.println(WiFi.localIP());
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
+    preferences.putString("ssid", WiFi.SSID());
+    preferences.putString("password", WiFi.psk());
+    preferences.end();
+    wifiSSID = WiFi.SSID();
+    wifiPassword = WiFi.psk();
+#else
+    // initialize wireless network.
+    Serial.printf("Connecting to WiFi %s\n", wifiSSID.c_str());
+    if (u8g2) {
+        u8g2->setDrawColor(0);
+        u8g2->drawBox(0, 42, 128, 14);
+        u8g2->setDrawColor(1);
+        u8g2->drawStr(0, 52, "Connecting to WiFi...");
+        u8g2->sendBuffer();
+    }
+    connectToWiFi(wifiSSID, wifiPassword, 1000);
+#endif
+
+    if (isConnected()) {
+        ip = WiFi.localIP();
+        // Serial.println();
+        Serial.print("[Telnet] ");
+        Serial.print(ip);
+        Serial.print(":");
+        Serial.println(port);
+        setupTelnet(); // todo: find another library / modify the code to support multiple client connection.
+    } else {
+        // Serial.println();
+        Serial.println("Error connecting to WiFi, Telnet startup skipped.");
     }
 
     // Initialize SX1276
@@ -991,7 +1053,7 @@ void handleSync() {
 void handleTelnet() {
     if (isConnected() && !telnet_online) {
         ip = WiFi.localIP();
-        Serial.printf("WIFI Connection to %s established.\n", WIFI_SSID);
+        Serial.printf("WIFI Connection to %s established.\n", wifiSSID.c_str());
         Serial.print("[Telnet] ");
         Serial.print(ip);
         Serial.print(":");
@@ -1164,7 +1226,12 @@ void loop() {
             WiFiClass::mode(WIFI_OFF);
             setCpuFrequencyMhz(80);
             WiFiClass::mode(WIFI_MODE_STA);
-            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#ifdef USE_SMARTCONFIG
+            // connectWiFi();
+            WiFi.begin(wifiSSID, wifiPassword);
+#else
+            WiFi.begin(wifiSSID, wifiPassword);
+#endif
         }
         exec_init_f80 = true;
     }

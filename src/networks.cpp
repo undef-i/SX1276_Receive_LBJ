@@ -5,6 +5,7 @@
 #include "networks.hpp"
 
 /* ------------------------------------------------ */
+Preferences preferences;
 ESPTelnet telnet;
 IPAddress ip;
 uint16_t port = 23;
@@ -19,20 +20,68 @@ bool isConnected() {
     return (WiFiClass::status() == WL_CONNECTED);
 }
 
-bool connectWiFi(const char *ssid, const char *password, int max_tries, int pause) {
-    int i = 0;
-    WiFiClass::mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    do {
-        delay(pause);
+void performSmartConfig() {
+    WiFi.beginSmartConfig();
+    Serial.println("[Network]Waiting for SmartConfig...");
+    while (!WiFi.smartConfigDone()) {
+        delay(500);
         Serial.print(".");
-    } while (!isConnected() && i++ < max_tries);
-    if (isConnected())
-        Serial.print("SUCCESS.");
-    else
-        Serial.print("FAILED.");
+    }
+    Serial.println("\n[Network]SmartConfig received.");
+    Serial.println("[Network]Connecting to WiFi...");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\n[Network]WiFi connected.");
+    preferences.putString("ssid", WiFi.SSID());
+    preferences.putString("password", WiFi.psk());
+    Serial.println("[Network]WiFi credentials saved.");
+}
+
+bool connectToWiFi(const String &ssid, const String &password, int timeout) {
+    WiFi.begin(ssid.c_str(), password.c_str());
+    Serial.print("Connecting to saved WiFi...");
+    auto startAttemptTime = millis64();
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        if (millis64() - startAttemptTime > timeout) // Retry for 10 seconds
+        {
+            Serial.println("\n[Network]Failed to connect.");
+            return false;
+        }
+    }
+    Serial.println("\n[Network]WiFi connected using saved credentials.");
+    return true;
+}
+
+bool connectWiFi() {
+    WiFiClass::mode(WIFI_STA);
+    if (!wifiPassword.isEmpty() && !wifiSSID.isEmpty()) {
+        WiFi.begin(wifiSSID, wifiPassword);
+        Serial.println("[Network]Connecting to WiFi...");
+    }
+
+    preferences.begin("wifi-config", false);
+
+    String savedSSID = preferences.getString("ssid", "");
+    String savedPassword = preferences.getString("password", "");
+    wifiSSID = preferences.getString("ssid", "");
+    wifiPassword = preferences.getString("password", "");
+
+    if (!savedSSID.isEmpty() && !savedPassword.isEmpty()) {
+        if (!connectToWiFi(savedSSID, savedPassword, 10000)) {
+            performSmartConfig();
+        }
+    } else {
+        performSmartConfig();
+    }
+    Serial.print("[Network]IP Address: ");
+    Serial.println(WiFi.localIP());
     WiFi.setAutoReconnect(true);
     WiFi.persistent(true);
+    preferences.end();
     return isConnected();
 }
 
@@ -40,7 +89,14 @@ void silentConnect(const char *ssid, const char *password) {
     WiFiClass::mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.persistent(true);
-    WiFi.begin(ssid, password);
+    preferences.begin("wifi-config", false);
+
+    String savedSSID = preferences.getString("ssid", "");
+    String savedPassword = preferences.getString("password", "");
+
+    WiFi.begin(savedSSID.c_str(), savedPassword.c_str());
+
+    preferences.end();
 }
 
 void changeCpuFreq(uint32_t freq_mhz) {
@@ -55,7 +111,7 @@ void changeCpuFreq(uint32_t freq_mhz) {
         if (ets_get_cpu_frequency() != freq_mhz) {
             setCpuFrequencyMhz(freq_mhz);
             if (no_wifi) {
-                auto timer = millis64();
+                // auto timer = millis64();
                 WiFiClass::mode(WIFI_OFF);
                 WiFi.setSleep(true);
                 // Serial.printf("[D] Switch to 80MHz, WIFI OFF [%llu] \n", millis64() - timer);
@@ -68,7 +124,13 @@ void changeCpuFreq(uint32_t freq_mhz) {
         Serial.printf("[D] WIFI OFF [%llu] \n", millis64() - timer);
         if (ets_get_cpu_frequency() != freq_mhz)
             setCpuFrequencyMhz(freq_mhz);
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        // fixme: this needs to be modified to fit the requirement.
+#ifdef USE_SMARTCONFIG
+        // connectWiFi();
+        WiFi.begin(wifiSSID, wifiPassword);
+#else
+        WiFi.begin(wifiSSID, wifiPassword);
+#endif
         // Serial.println("[D] WIFI BEGIN");
         WiFiClass::mode(WIFI_MODE_STA);
         // Serial.println("[D] WIFI STA");

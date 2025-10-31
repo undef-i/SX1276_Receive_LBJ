@@ -8,3 +8,4 @@ logs
 /readcd_bin.ps1
 /readcd_txt.bat
 rust
+.clang-format
