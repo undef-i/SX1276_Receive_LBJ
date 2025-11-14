@@ -5,6 +5,8 @@
    Original file:
    https://github.com/jgromes/RadioLib/blob/master/examples/Pager/Pager_Receive/Pager_Receive.ino
 */
+
+#include <atomic>
 /*
    RadioLib Pager (POCSAG) Receive Example
 
@@ -39,6 +41,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <BLECharacteristic.h>
+#include <ArduinoJson.h>
 
 // configure the wifi connection
 String wifiSSID = "MI CC9 Pro";
@@ -87,7 +90,7 @@ float ppm = INITIAL_PPM;
 
 BLEServer *pServer = nullptr;
 BLECharacteristic *pTxCharacteristic = nullptr;
-bool deviceConnected = false;
+std::atomic<bool> deviceConnected{false};
 bool oldDeviceConnected = false;
 uint64_t ble_timer = 0;
 
@@ -120,18 +123,19 @@ SD_LOG sd1;
 
 class SafeServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) override {
-      deviceConnected = true;
+      deviceConnected.store(true, std::memory_order_release);
       Serial.println("[BLE] Device is connected");
       ble_timer = millis64();
     }
     
     void onDisconnect(BLEServer* pServer) override {
-      deviceConnected = false;
+      deviceConnected.store(false, std::memory_order_release);
       Serial.println("[BLE] Device is disconnected");
     }
 };
 struct rx_info rxInfo;
 struct data_bond *db = nullptr;
+QueueHandle_t xQueue_db;
 // PagerClient::pocsag_data *pd = nullptr;
 //endregion
 
@@ -148,8 +152,6 @@ int voltageToPercentage(float voltage) {
 
 void formatDataTask(void *pVoid);
 
-void simpleFormatTask();
-
 void initFmtVars();
 
 void handleSerialInput();
@@ -159,19 +161,6 @@ void handleCarrier();
 void handlePreamble();
 
 void revertFrequency();
-
-TaskHandle_t task_fd;
-enum task_states {
-    TASK_INIT = 0,
-    TASK_CREATED = 1,
-    TASK_RUNNING = 2,
-    TASK_DONE = 3,
-    TASK_TERMINATED = 4,
-    TASK_CREATE_FAILED = 5,
-    TASK_RUNNING_SCREEN = 6
-};
-
-task_states fd_state;
 
 #ifdef HAS_DISPLAY
 
@@ -218,13 +207,10 @@ void showInitComp() {
     else if (WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "N");
     char buffer[32];
-    // CPU频率显示：如果有SNTP则简写，否则完整显示
     if (getLocalTime(&time_info, 0)) {
-        // 有SNTP时间，使用简写显示
         sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
         u8g2->drawStr(96, 64, buffer);
     } else {
-        // 无SNTP时间，使用完整显示并右对齐
         sprintf(buffer, "%uMHz", ets_get_cpu_frequency());
         int width = u8g2->getStrWidth(buffer);
         u8g2->drawStr(128 - width, 64, buffer);
@@ -233,7 +219,6 @@ void showInitComp() {
     float batt_voltage = battery.readVoltage() * 2;
     int batt_percent = voltageToPercentage(batt_voltage);
     
-    // 仅当左上角不显示电池电量时，才在右下角显示
     if (getLocalTime(&time_info, 0)) {
         sprintf(buffer, "%d%%", batt_percent);
         u8g2->drawStr(108, 64, buffer);
@@ -244,7 +229,6 @@ void showInitComp() {
                 time_info.tm_hour, time_info.tm_min);
         u8g2->drawStr(0, 7, buffer);
     } else {
-        // 如果没有SNTP时间，在左上角显示电池电量百分比
         sprintf(buffer, "%d%%", batt_percent);
         u8g2->drawStr(0, 7, buffer);
     }
@@ -263,7 +247,6 @@ void updateInfo() {
                 time_info.tm_hour, time_info.tm_min);
         u8g2->drawStr(0, 7, buffer);
     } else {
-        // 如果没有SNTP时间，在左上角显示电池电量百分比
         int batt_percent = voltageToPercentage(voltage);
         sprintf(buffer, "%d%%", batt_percent);
         u8g2->drawStr(0, 7, buffer);
@@ -290,13 +273,10 @@ void updateInfo() {
     else if (WiFiClass::status() == WL_CONNECTED)
         u8g2->drawStr(89, 64, "N");
 
-    // CPU频率显示：如果有SNTP则简写，否则完整显示
     if (getLocalTime(&time_info, 0)) {
-        // 有SNTP时间，使用简写显示
         sprintf(buffer, "%2u", ets_get_cpu_frequency() / 10);
         u8g2->drawStr(96, 64, buffer);
     } else {
-        // 无SNTP时间，使用完整显示并右对齐
         sprintf(buffer, "%uMHz", ets_get_cpu_frequency());
         int width = u8g2->getStrWidth(buffer);
         u8g2->drawStr(128 - width, 64, buffer);
@@ -398,7 +378,6 @@ void showLBJ1(const struct lbj_data &l) {
         ++c;
     }
     
-    // 去除lbj_class中的空格
     char cls_buf[3];
     int j = 0;
     for (int i = 0; i < 2 && l.lbj_class[i] != '\0'; i++) {
@@ -438,17 +417,13 @@ void showLBJ1(const struct lbj_data &l) {
     u8g2->setFont(FONT_12_GB2312);
     // line 3
     u8g2->setCursor(0, 43);
-    // 第三行：左边显示机车型号，右边显示机车编号（右对齐）
-    
-    // 左边显示机车型号
+
     u8g2->setFont(FONT_12_GB2312);
     if (l.loco_type.length())
         u8g2->drawUTF8(0, 43, l.loco_type.c_str());
     
-    // 右边显示机车编号（右对齐）
     u8g2->setFont(u8g2_font_profont12_custom_tf);
     
-    // 构建带后缀的机车编号
     char loco_with_suffix[16] = {0};
     if (String(l.loco) != "<NUL>" && l.info2_hex.length() > 14 && l.info2_hex[12] == '3') {
         if (l.info2_hex[13] == '1')
@@ -461,26 +436,22 @@ void showLBJ1(const struct lbj_data &l) {
         strcpy(loco_with_suffix, l.loco);
     }
     
-    // 计算宽度并右对齐显示
     if (strcmp(loco_with_suffix, "<NUL>") != 0) {
         int width = u8g2->getStrWidth(loco_with_suffix);
         u8g2->drawStr(128 - width, 43, loco_with_suffix);
     }
-    // line 4 - 优化位置信息显示
     char pos_buffer[64] = {0};
     
-    // 处理纬度
     if (l.pos_lat_deg[1] && l.pos_lat_min[1]) {
         sprintf(pos_buffer, "%s°%s'", l.pos_lat_deg, l.pos_lat_min);
-    } else if (l.pos_lat[0] != '<') { // 不是<NUL>等占位符
+    } else if (l.pos_lat[0] != '<') {
         sprintf(pos_buffer, "%s ", l.pos_lat);
     }
     
-    // 处理经度
     if (l.pos_lon_deg[1] && l.pos_lon_min[1]) {
         sprintf(buffer, "%s°%s'", l.pos_lon_deg, l.pos_lon_min);
         strcat(pos_buffer, buffer);
-    } else if (l.pos_lon[0] != '<') { // 不是<NUL>等占位符
+    } else if (l.pos_lon[0] != '<') {
         sprintf(buffer, "%s", l.pos_lon);
         strcat(pos_buffer, buffer);
     }
@@ -520,17 +491,24 @@ void showLBJ2(const struct lbj_data &l) {
 
 #endif
 
-void dualPrintf(bool time_stamp, const char *format, ...) { // Generated by ChatGPT.
-    char buffer[256]; // 创建一个足够大的缓冲区来容纳格式化后的字符串
+void dualPrintf(bool time_stamp, const char *format, ...) {
     va_list args;
     va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args); // 格式化字符串
+    int len = vsnprintf(nullptr, 0, format, args);
     va_end(args);
 
-    // 输出到 Serial
-    Serial.print(buffer);
+    if (len < 0) {
+        Serial.println("[ERROR] dualPrintf encoding error!");
+        return;
+    }
 
-    // 输出到 Telnet
+    std::vector<char> buffer(len + 1);
+    va_start(args, format);
+    vsnprintf(buffer.data(), buffer.size(), format, args);
+    va_end(args);
+
+    // Output to Serial
+    Serial.print(buffer.data());
     if (telnet_online) { // code from Multimon-NG unixinput.c 还得是multimon-ng，chatGPT写了四五个版本都没解决。
         if (is_startline) {
             telnet.print("\r> ");
@@ -539,8 +517,8 @@ void dualPrintf(bool time_stamp, const char *format, ...) { // Generated by Chat
                               time_info.tm_mday, time_info.tm_hour, time_info.tm_min, time_info.tm_sec);
             is_startline = false;
         }
-        telnet.print(buffer);
-        if (nullptr != strchr(buffer, '\n')) {
+        telnet.print(buffer.data());
+        if (nullptr != strchr(buffer.data(), '\n')) {
             is_startline = true;
             telnet.print("\r< ");
         }
@@ -628,7 +606,6 @@ void LBJTEST() {
     printDataSerial(pocdat, lbj, rxInfo);
     // // appendDataLog(pocdat, lbj, rxInfo);
     // // printDataTelnet(pocdat, lbj, rxInfo);
-    // simpleFormatTask();
     // rxInfo.rssi = 0;
     // rxInfo.fer = 0;
     // delete db;
@@ -756,29 +733,34 @@ void initBLE() {
 }
 
 void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, bool isTest) {
-    static char buffer[512];
-    
     if (!ble_enabled) {
         Serial.println("[BLE] Warning trying to send data while BLE is disabled");
         return;
     }
-    
+
     if (pTxCharacteristic == nullptr) {
         Serial.println("[BLE] Error TX characteristic is null cannot send data");
         return;
     }
-    
-    if (!deviceConnected) {
+
+    if (!deviceConnected.load(std::memory_order_acquire)) {
         Serial.println("[BLE] Info no device connected not sending data");
         return;
     }
-    
-    try {
-        memset(buffer, 0, sizeof(buffer));
 
-        Serial.printf("DEBUG JSON: train='%s', route='%s', loco_type='%s'\n",
-                    l.train, l.route_utf8, l.loco_type.c_str());
-        
+    try {
+        DynamicJsonDocument doc(1024); // Allocate a JSON document
+
+        doc["train"] = l.train;
+        doc["dir"] = l.direction;
+        doc["speed"] = l.speed;
+        doc["pos"] = l.position;
+        doc["time"] = l.time;
+        doc["loco"] = l.loco;
+        doc["loco_type"] = l.loco_type;
+        doc["lbj_class"] = l.lbj_class;
+        doc["route"] = l.route_utf8;
+
         String position_info = "";
         if (l.pos_lat_deg[0] && l.pos_lat_min[0] && l.pos_lon_deg[0] && l.pos_lon_min[0]) {
             position_info = String(l.pos_lat_deg) + "°" + String(l.pos_lat_min) + "′ "
@@ -786,16 +768,27 @@ void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, boo
         } else if (l.pos_lat[0] && l.pos_lon[0]) {
             position_info = String(l.pos_lat) + " " + String(l.pos_lon);
         }
+        doc["position_info"] = position_info;
+        doc["rssi"] = r.rssi;
+        doc["test_flag"] = isTest;
+
+        size_t jsonSize = measureJson(doc);
         
-        snprintf(buffer, sizeof(buffer),
-            "{\"train\":\"%s\",\"dir\":%d,\"speed\":\"%s\",\"pos\":\"%s\",\"time\":\"%s\",\"loco\":\"%s\",\"loco_type\":\"%s\",\"lbj_class\":\"%s\",\"route\":\"%s\",\"position_info\":\"%s\",\"rssi\":%.2f,\"test_flag\":%s}",
-            l.train, l.direction, l.speed, l.position, l.time, l.loco,
-            l.loco_type.c_str(), l.lbj_class, l.route_utf8,
-            position_info.c_str(),
-            r.rssi, isTest ? "true" : "false");
+        if (jsonSize > 65536) { 
+            Serial.printf("[BLE][ERROR] JSON unreasonably large: %zu bytes (max 65536)\n", jsonSize);
+            return;
+        }
         
-        if (deviceConnected && pTxCharacteristic != nullptr) {
-            pTxCharacteristic->setValue(buffer);
+        String output;
+        output.reserve(jsonSize + 10);
+        serializeJson(doc, output);
+        
+        if (deviceConnected.load(std::memory_order_acquire) && pTxCharacteristic != nullptr) {
+            if (jsonSize > 1024) {
+                Serial.printf("[BLE] Large JSON packet: %zu bytes\n", jsonSize);
+            }
+            
+            pTxCharacteristic->setValue(output.c_str());
             pTxCharacteristic->notify();
             Serial.println("[BLE] Data sent");
         }
@@ -805,7 +798,6 @@ void sendTrainDataOverBLE(const struct lbj_data &l, const struct rx_info &r, boo
         Serial.println("[BLE] Unknown exception occurred while sending data");
     }
 }
-
 void readCsvAndSendBLE() {}
 
 bool sendNextHistoryDataOverBLE() {
@@ -824,6 +816,12 @@ void setup() {
     data_mutex = xSemaphoreCreateMutex();
     if (data_mutex == nullptr) {
         Serial.println("[ERROR] Failed to create data mutex!");
+        while(true);
+    }
+
+    xQueue_db = xQueueCreate(5, sizeof(data_bond*));
+    if (xQueue_db == nullptr) {
+        Serial.println("[ERROR] Failed to create data queue!");
         while(true);
     }
 
@@ -993,6 +991,8 @@ void setup() {
     if (ble_enabled) {
         initBLE();
     }
+
+    xTaskCreatePinnedToCore(formatDataTask, "task_fd", FD_TASK_STACK_SIZE, nullptr, 2, nullptr, ARDUINO_RUNNING_CORE);
 }
 
 // Loop functions
@@ -1086,7 +1086,7 @@ void handleBleConnections() {
         return;
     }
     
-    if (!deviceConnected && oldDeviceConnected) {
+    if (!deviceConnected.load(std::memory_order_acquire) && oldDeviceConnected) {
         Serial.println("[BLE] Device disconnected, reinitializing BLE service");
         
         try {
@@ -1120,11 +1120,11 @@ void handleBleConnections() {
             Serial.println("[BLE] Unknown error during reconnection");
         }
         
-        oldDeviceConnected = deviceConnected;
+        oldDeviceConnected = deviceConnected.load(std::memory_order_acquire);
     }
     
-    if (deviceConnected && !oldDeviceConnected) {
-        oldDeviceConnected = deviceConnected;
+    if (deviceConnected.load(std::memory_order_acquire) && !oldDeviceConnected) {
+        oldDeviceConnected = deviceConnected.load(std::memory_order_acquire);
         if (pTxCharacteristic != nullptr) {
             pTxCharacteristic->setValue("LBJ Train Warning Ready");
             pTxCharacteristic->notify();
@@ -1167,30 +1167,10 @@ void loop() {
     }
 
     // if task complete, de-initialize
-    if (fd_state == TASK_DONE) {
-        if (task_fd != nullptr) {
-            // Serial.printf("[D] NULLPTR EXCE [%llu]\n", millis64() - format_task_timer);
-            vTaskDelete(task_fd);
-            // Serial.printf("[D] TASK DEL [%llu]\n", millis64() - format_task_timer);
-            task_fd = nullptr;
-        }
-        // Serial.printf("[D] NULLPTR [%llu]\n", millis64() - format_task_timer);
-        initFmtVars();
-        // Serial.printf("[D] INIT VARS [%llu]\n", millis64() - format_task_timer);
-        // digitalWrite(BOARD_LED, LED_OFF);
-        // Serial.printf("[D] LED LOW [%llu]\n", millis64() - format_task_timer);
-        // changeCpuFreq(240);
-        // Serial.printf("[D] FREQ CHANGED [%llu]\n", millis64() - format_task_timer);
-        fd_state = TASK_INIT;
-        format_task_timer = 0;
-    } else if (fd_state == TASK_CREATE_FAILED) { // Handle create failure.
-        initFmtVars();
-        // changeCpuFreq(240);
-        format_task_timer = 0;
-        fd_state = TASK_INIT;
-    }
+    // The formatDataTask is now a permanent task, so no need to de-initialize or handle timeouts here.
+    // Data is passed via queue.
 
-    if (millis64() - led_timer > LED_ON_TIME && led_timer != 0 && fd_state == TASK_INIT) {
+    if (millis64() - led_timer > LED_ON_TIME && led_timer != 0) {
         digitalWrite(BOARD_LED, LED_OFF);
         led_timer = 0;
         changeCpuFreq(240);
@@ -1204,7 +1184,7 @@ void loop() {
     if (ble_enabled) {
         handleBleConnections();
         
-        if (deviceConnected) {
+        if (deviceConnected.load(std::memory_order_acquire)) {
             if (ble_timer == 0 || millis64() - ble_timer > 30000) {
                 Serial.println("[BLE] Connection active waiting for actual data");
                 ble_timer = millis64();
@@ -1212,8 +1192,7 @@ void loop() {
         }
     }
 
-    if (millis64() > 60000 && format_task_timer == 0 &&
-        !exec_init_f80) // lower down frequency 60 sec after startup and idle.
+    if (millis64() > 60000 && !exec_init_f80) // lower down frequency 60 sec after startup and idle.
     {
         if (isConnected())
             setCpuFrequencyMhz(80);
@@ -1249,59 +1228,8 @@ void loop() {
     }
 #endif
 #endif
-    // if (millis64()%5000 == 0){
-    //     sd1.append("[D] 当前运行时间 %lu ms.\n",millis64());
-    //     sd1.append("[D] 测试输出：\n");
-    //     LBJTEST();
-    // }
-
-    // if (millis64() - format_task_timer >= 200 && format_task_timer != 0) {
-    //     Serial.printf("LED LOW [%llu]\n", millis64() - format_task_timer);
-    //     digitalWrite(BOARD_LED, LED_OFF);
-    //     if (fd_state == TASK_DONE || fd_state == TASK_INIT) {
-    //         format_task_timer = 0;
-    //         // changeCpuFreq(240);
-    //     }
-    // }
-
-    // handle task timeout
-    // timeout & running | created
-    // todo: simplify this judgement.
-    if (millis64() - format_task_timer >= FD_TASK_TIMEOUT && (fd_state == TASK_RUNNING || fd_state == TASK_CREATED)
-        && task_fd != nullptr && format_task_timer != 0) {
-        vTaskDelete(task_fd);
-        task_fd = nullptr;
-        // fd_state = TASK_TERMINATED;
-        dualPrintln("[Pager] FD_TASK Timeout.");
-        sd1.append("[Pager] FD_TASK Timeout.\n");
-        initFmtVars();
-        Serial.printf("LED LOW [%llu]\n", millis64() - format_task_timer);
-        digitalWrite(BOARD_LED, LED_OFF);
-        format_task_timer = 0;
-        led_timer = 0;
-        changeCpuFreq(240);
-        fd_state = TASK_INIT;
-    }
-    // else if (millis64() - format_task_timer >= FD_TASK_TIMEOUT && fd_state != TASK_INIT && format_task_timer != 0 &&
-    //            fd_state != TASK_RUNNING_SCREEN) { // terminate task while u8g2 operation causes main loop stuck.
-    //     Serial.printf("[Pager] Task state %d \n", fd_state);
-    //     if (task_fd != nullptr) {
-    //         vTaskDelete(task_fd);
-    //         task_fd = nullptr;
-    //     }
-    //     dualPrintln("[Pager] FD_TASK Timeout.");
-    //     sd1.append("[Pager] FD_TASK Timeout.\n");
-    //     initFmtVars();
-    //     Serial.printf("LED LOW [%llu]\n", millis64() - format_task_timer);
-    //     digitalWrite(BOARD_LED, LED_OFF);
-    //     format_task_timer = 0;
-    //     led_timer = 0;
-    //     changeCpuFreq(240);
-    //     fd_state = TASK_INIT;
-    // }
 
     if (millis64() - timer4 >= 60000 && timer4 != 0 && ets_get_cpu_frequency() != 80) // fCPU to 80 after 60s in idle.
-//        setCpuFrequencyMhz(80);
         changeCpuFreq(80);
 
     handleCarrier();
@@ -1311,28 +1239,18 @@ void loop() {
 
     // the number of batches to wait for
     // 2 batches will usually be enough to fit short and medium messages
-    if (pager.available() >= 2 && fd_state == TASK_INIT) { // todo add session timeout exception to prevent stuck here.
-        // Serial.println("[PHY-LAYER][D] AVAILABLE > 2.");
+    if (pager.available() >= 2) {
         setCpuFrequencyMhz(240);
         db = new data_bond;
         runtime_timer = millis64();
         timer4 = millis64();
         int state = pager.readDataMSA(db->pocsagData, 0);
-//        sd1.append("[PHY-LAYER][D] AVAILABLE > 2.\n");
         rxInfo.rssi = rssi_cache / (float) rxInfo.cnt;
         rssi_cache = 0;
         rxInfo.cnt = 0;
         rxInfo.timer = 0;
         prb_timer = 0;
         car_timer = 0;
-        // radio.setRxBandwidth(20.8);
-        // bandwidth_altered = false;
-
-//        Serial.printf("CPU FREQ TO %d MHz\n",ets_get_cpu_frequency());
-
-        // PagerClient::pocsag_data pocdat[POCDAT_SIZE];
-        // struct lbj_data lbj;
-        // pd = new PagerClient::pocsag_data[POCDAT_SIZE];
 
         Serial.printf("[D] Prb_count %d\n", prb_count);
         Serial.printf("[D] Car_count %d\n", car_count);
@@ -1344,8 +1262,6 @@ void loop() {
             Serial.printf("[D] Fer %.2f Hz\n", fers[i]);
             fers[i] = 0;
         }
-        // Serial.printf("[D] Fer %.2f Hz\n", fer);
-        // fer = 0;
         prb_count = 0;
         car_count = 0;
         car_fer_last = 0;
@@ -1354,73 +1270,31 @@ void loop() {
         Serial.println(F("[Pager] Received pager data, decoding ... "));
         sd1.append(2, "正在解码信号...\n");
 
-        // you can read the data as an Arduino String
-        // String str = {};
-
         if (state == RADIOLIB_ERR_NONE) {
             freq_last = actual_frequency;
-//            Serial.printf("success.\n");
             digitalWrite(BOARD_LED, LED_ON);
-            format_task_timer = millis64();
             led_timer = millis64();
 
             sd1.append(2, "正在格式化输出...\n");
-            // formatDataTask();
-            auto x_ret = xTaskCreatePinnedToCore(formatDataTask, "task_fd",
-                                                 FD_TASK_STACK_SIZE, nullptr,
-                                                 2, &task_fd, ARDUINO_RUNNING_CORE);
-            if (x_ret == pdPASS) {
-                fd_state = TASK_CREATED;
-                delay(1);
-            } else if (x_ret == errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY) {
-                int x_ret1;
-                for (int i = 0; i < FD_TASK_ATTEMPTS; ++i) {
-                    x_ret1 = xTaskCreatePinnedToCore(formatDataTask, "task_fd",
-                                                     FD_TASK_STACK_SIZE, nullptr,
-                                                     2, &task_fd, ARDUINO_RUNNING_CORE);
-                    if (x_ret1 == pdPASS) {
-                        fd_state = TASK_CREATED;
-                        delay(1);
-                        break;
-                    }
-                    Serial.printf("[Pager] FTask failed memory allocation, error %d, mem left %d B, retry %d\n",
-                                  x_ret1, esp_get_free_heap_size(), i);
-                    sd1.append("[Pager] FTask failed memory allocation, error %d, mem left %d B, retry %d\n",
-                               x_ret1, esp_get_free_heap_size(), i);
-                }
-                if (x_ret1 != pdPASS) {
-                    Serial.printf("Mem left: %d Bytes\n", esp_get_free_heap_size());
-                    dualPrintf(true, "[Pager] Format task memory allocation failure\n");
-                    sd1.append("[Pager] Format task memory allocation failure, Mem left %d Bytes\n",
-                               esp_get_free_heap_size());
-                    fd_state = TASK_CREATE_FAILED;
-                    simpleFormatTask();
-                    digitalWrite(BOARD_LED, LED_OFF);
-                }
-            } else {
-                dualPrintf(true, "[Pager] Failed to create format task, errcode %d\n", x_ret);
-                sd1.append("[Pager] Failed to create format task, errcode %d\n", x_ret);
-                fd_state = TASK_CREATE_FAILED;
-                digitalWrite(BOARD_LED, LED_OFF);
+            if (xQueueSend(xQueue_db, &db, portMAX_DELAY) != pdPASS) {
+                Serial.println("[ERROR] Failed to send data to queue!");
+                sd1.append("[ERROR] Failed to send data to queue!\n");
+                delete db;
+                db = nullptr;
+                initFmtVars();
             }
-
         } else if (state == RADIOLIB_ERR_MSG_CORRUPT) {
-//            Serial.printf("failed.\n");
-//            Serial.println("[Pager] Reception failed, too many errors.");
             dualPrintf(true, "[Pager] Reception failed, too many errors. \n");
             revertFrequency();
-//            sd1.append("[Pager] Reception failed, too many errors. \n");
+            delete db;
+            db = nullptr;
+            initFmtVars();
         } else {
-            // some error occurred
             sd1.append("[Pager] Reception failed, code %d \n", state);
             dualPrintf(true, "[Pager] Reception failed, code %d \n", state);
-        }
-
-        // if task was not called.
-        if (fd_state == TASK_INIT) {
+            delete db;
+            db = nullptr;
             initFmtVars();
-        } else if (fd_state == TASK_CREATED && task_fd == nullptr) {
-            fd_state = TASK_DONE;
         }
     }
 }
@@ -1548,12 +1422,10 @@ void handleSerialInput() {
         else if (in == "ble status") {
             Serial.printf("[BLE] Status: %s, Connection: %s\n",
                 ble_enabled ? "enabled" : "disabled",
-                deviceConnected ? "Connected" : "Disconnected");
+                deviceConnected.load(std::memory_order_acquire) ? "Connected" : "Disconnected");
         }
         else if (in == "ping")
             Serial.println("$ Pong");
-        else if (in == "task state")
-            Serial.println("$ Task state " + String(fd_state));
         else if (in == "rtc") {
 #ifdef HAS_RTC
             // rtc.getDateTime(time_info);
@@ -1650,118 +1522,100 @@ void initFmtVars() {
 }
 
 void formatDataTask(void *pVoid) {
-    fd_state = TASK_RUNNING;
-    // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "格式化任务已创建\n");
-    
-    for (auto &i: db->pocsagData) {
-        if (i.is_empty)
-            continue;
-        Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        
-        db->str = db->str + "  " + i.str;
-    }
+    data_bond *db_local = nullptr;
+    for (;;) {
+        if (xQueueReceive(xQueue_db, &db_local, portMAX_DELAY) == pdTRUE) {
+            // Serial.printf("[FD-Task] Stack High Mark Begin %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            sd1.append(2, "格式化任务已创建\n");
+            
+            for (auto &i: db_local->pocsagData) {
+                if (i.is_empty)
+                    continue;
+                Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+                sd1.append(2, "[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
+                
+                db_local->str = db_local->str + "  " + i.str;
+            }
 
-    // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
-    Serial.printf("decode complete.[%llu]", millis64() - runtime_timer);
-    readDataLBJ(db->pocsagData, &db->lbjData);
-    sd1.append(2, "LBJ读取完成，用时[%llu]\n", millis64() - runtime_timer);
-    Serial.printf("Read complete.[%llu]", millis64() - runtime_timer);
-    // Serial.printf("[FD-Task] Stack High Mark rLBJ %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            // Serial.printf("[FD-Task] Stack High Mark pDATA %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            sd1.append(2, "原始数据输出完成，用时[%llu]\n", millis64() - runtime_timer);
+            Serial.printf("decode complete.[%llu]", millis64() - runtime_timer);
+            readDataLBJ(db_local->pocsagData, &db_local->lbjData);
+            sd1.append(2, "LBJ读取完成，用时[%llu]\n", millis64() - runtime_timer);
+            Serial.printf("Read complete.[%llu]", millis64() - runtime_timer);
+            // Serial.printf("[FD-Task] Stack High Mark rLBJ %u\n", uxTaskGetStackHighWaterMark(nullptr));
 
-    printDataSerial(db->pocsagData, db->lbjData, rxInfo);
-    sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
-    
-    if (data_mutex != nullptr) {
-        if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            current_lbj_data = db->lbjData;
-            xSemaphoreGive(data_mutex);
-        } else {
-            Serial.println("[ERROR] data_mutex take timeout in formatDataTask - CRITICAL!");
-        }
-    } else {
-        Serial.println("[ERROR] data_mutex is null in formatDataTask - CRITICAL!");
-    }
-    
-    if (ble_enabled && db != nullptr) {
-        try {
-            sendTrainDataOverBLE(db->lbjData, rxInfo);
-        } catch (...) {
-            Serial.println("[BLE] Error occurred while sending data over BLE");
-        }
-    }
-    Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
+            printDataSerial(db_local->pocsagData, db_local->lbjData, rxInfo);
+            sd1.append(2, "串口输出完成，用时[%llu]\n", millis64() - runtime_timer);
+            
+            if (data_mutex != nullptr) {
+                if (xSemaphoreTake(data_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    current_lbj_data = db_local->lbjData;
+                    xSemaphoreGive(data_mutex);
+                } else {
+                    Serial.println("[ERROR] data_mutex take timeout in formatDataTask - CRITICAL!");
+                }
+            } else {
+                Serial.println("[ERROR] data_mutex is null in formatDataTask - CRITICAL!");
+            }
+            
+            if (ble_enabled && db_local != nullptr) {
+                try {
+                    sendTrainDataOverBLE(db_local->lbjData, rxInfo);
+                } catch (...) {
+                    Serial.println("[BLE] Error occurred while sending data over BLE");
+                }
+            }
+            Serial.printf("SPRINT complete.[%llu]", millis64() - runtime_timer);
 
-    // sd1.disableSizeCheck();
-    appendDataLog(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
-    appendDataCSV(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
-    
-    // sd1.enableSizeCheck();
+            // sd1.disableSizeCheck();
+            appendDataLog(db_local->pocsagData, db_local->lbjData, rxInfo);
+            Serial.printf("sdprint complete.[%llu]", millis64() - runtime_timer);
+            appendDataCSV(db_local->pocsagData, db_local->lbjData, rxInfo);
+            Serial.printf("csvprint complete.[%llu]", millis64() - runtime_timer);
+            
+            // sd1.enableSizeCheck();
 
-    printDataTelnet(db->pocsagData, db->lbjData, rxInfo);
-    Serial.printf("telprint complete.[%llu]", millis64() - runtime_timer);
-    // Serial.printf("[FD-Task] Stack High Mark TRI-OUT %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            printDataTelnet(db_local->pocsagData, db_local->lbjData, rxInfo);
+            Serial.printf("telprint complete.[%llu]", millis64() - runtime_timer);
+            // Serial.printf("[FD-Task] Stack High Mark TRI-OUT %u\n", uxTaskGetStackHighWaterMark(nullptr));
 // Serial.printf("type %d \n",lbj.type);
 
 #ifdef HAS_DISPLAY
-    fd_state = TASK_RUNNING_SCREEN;
-    if (u8g2) {
+            // fd_state = TASK_RUNNING_SCREEN;
+            if (u8g2) {
 #ifdef HAS_OLED_TIMEOUT
-        if (oled_off) {
-            oled_off = false;
-            u8g2->setPowerSave(false);
-            u8g2->clearBuffer();
-            updateInfo();
-        }
+                if (oled_off) {
+                    oled_off = false;
+                    u8g2->setPowerSave(false);
+                    u8g2->clearBuffer();
+                    updateInfo();
+                }
 #endif
-        if (db->lbjData.type == 0)
-            showLBJ0(db->lbjData);
-        else if (db->lbjData.type == 1) {
-            showLBJ1(db->lbjData);
-        } else if (db->lbjData.type == 2) {
-            showLBJ2(db->lbjData);
-        }
-        Serial.printf("Complete u8g2 [%llu]\n", millis64() - runtime_timer);
-    }
+                if (db_local->lbjData.type == 0)
+                    showLBJ0(db_local->lbjData);
+                else if (db_local->lbjData.type == 1) {
+                    showLBJ1(db_local->lbjData);
+                } else if (db_local->lbjData.type == 2) {
+                    showLBJ2(db_local->lbjData);
+                }
+                Serial.printf("Complete u8g2 [%llu]\n", millis64() - runtime_timer);
+            }
 #endif
-    Serial.printf("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "任务堆栈标 %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    // sd1.append("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
-    sd1.append(2, "格式化输出任务完成，用时[%llu]\n", millis64() - runtime_timer);
-    
-    if (db != nullptr) {
-        delete db;
-        db = nullptr;
+            Serial.printf("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            sd1.append(2, "任务堆栈标 %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            // sd1.append("[FD-Task] Stack High Mark %u\n", uxTaskGetStackHighWaterMark(nullptr));
+            sd1.append(2, "格式化输出任务完成，用时[%llu]\n", millis64() - runtime_timer);
+            
+            if (db_local != nullptr) {
+                delete db_local;
+                db_local = nullptr;
+            }
+            // fd_state = TASK_DONE;
+            // task_fd = nullptr;
+            // vTaskDelete(nullptr);
+        }
     }
-    
-    fd_state = TASK_DONE;
-    task_fd = nullptr;
-    vTaskDelete(nullptr);
 }
 
-void simpleFormatTask() { // only output initially phrased data in case of memory shortage
-    for (auto &i: db->pocsagData) {
-        if (i.is_empty)
-            continue;
-        Serial.printf("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        sd1.append("[D-pDATA] %d/%d: %s\n", i.addr, i.func, i.str.c_str());
-        
-        // db->str = db->str + "  " + i.str;
-        db->str += String(i.addr) + "/" + String(i.func) + ":" + i.str + "\n ";
-    }
-    // pword(db->str.c_str(),20,50);
-#ifdef HAS_OLED_TIMEOUT
-    if (oled_off) {
-        oled_off = false;
-        u8g2->setPowerSave(false);
-        u8g2->clearBuffer();
-        updateInfo();
-    }
-#endif
-    showSTR(db->str);
-}
 // END OF FILE.

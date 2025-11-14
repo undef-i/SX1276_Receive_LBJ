@@ -150,7 +150,8 @@ bool CBCH3121::decode(uint32_t &data, uint16_t &errors, bool &parity) {
                 }
 
                 if (!Q) {
-                    locator[cnt] = i % POCSAG_BCH_N;
+                    if (cnt >= 5) return false;
+                    locator[cnt] = i;
                     cnt++;
                 }
             }

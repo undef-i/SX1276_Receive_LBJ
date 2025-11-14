@@ -36,6 +36,9 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
     bool complete = false;
     uint8_t framePos = 0;
     uint32_t addr_next = 0;
+    
+    const size_t INITIAL_BUFFER_SIZE = 256;
+    const size_t MAX_BUFFER_SIZE = 8192; 
 //        bool is_empty = true;
     for (size_t i = 0; i < POCDAT_SIZE; i++) {
         // determine the message length, based on user input or the amount of received data
@@ -48,16 +51,18 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
         if (complete)
             break;
 
-        // build a temporary buffer
 #if defined(RADIOLIB_STATIC_ONLY)
         uint8_t data[RADIOLIB_STATIC_ARRAY_SIZE + 1];
+        size_t bufferSize = RADIOLIB_STATIC_ARRAY_SIZE + 1;
 #else
-        // auto *data = new uint8_t[len + 1];
-        // if (!data) {
-        //     return (RADIOLIB_ERR_MEMORY_ALLOCATION_FAILED);
-        // }
+
+        size_t requiredSize = (len > 0) ? (len + 64) : 320;  // +64字節安全邊際
+        size_t bufferSize = std::max(requiredSize, static_cast<size_t>(256));  // 至少256
+        uint8_t* data = new (std::nothrow) uint8_t[bufferSize];
+        if (!data) {
+            return RADIOLIB_ERR_MEMORY_ALLOCATION_FAILED;
+        }
 #endif
-        uint8_t data[len + 1];
 
         state = readDataMA(data, &length, &p[i].addr, &p[i].func, &framePos, &addr_next, &p[i].is_empty,
                            &complete, &p[i].errs_total, &p[i].errs_uncorrected);
@@ -95,8 +100,8 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
 
         }
 #if !defined(RADIOLIB_STATIC_ONLY)
-        // delete[] data;
-        // data = nullptr;
+        delete[] data;
+        data = nullptr;
 #endif
         if (state != RADIOLIB_ERR_NONE)
             break;
@@ -139,6 +144,8 @@ int16_t PagerClient::readDataMSA(struct PagerClient::pocsag_data *p, size_t len)
 int16_t PagerClient::readDataMA(uint8_t *data, size_t *len, uint32_t *addr, uint32_t *func, uint8_t *framePos,
                                 uint32_t *addr_next, bool *is_empty, bool *complete, uint16_t *errs_total,
                                 uint16_t *errs_uncorrected) {
+    const size_t MAX_MESSAGE_LENGTH = 1024;
+    
     // find the correct address
     bool match = false;
 //    uint8_t framePos = 0;

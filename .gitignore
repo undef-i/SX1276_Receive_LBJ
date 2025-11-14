@@ -10,3 +10,4 @@ logs
 rust
 .clang-format
 uncrustify.cfg
+build/
